@@ -1,8 +1,7 @@
 // src/pages/LoginPage.tsx
 import React from 'react';
 import { Button } from '../components/ui/Button';
-import splashBg from '../../assets/splash-bg.png';
-
+import splashBg from "../assets/splash-bg.png";
 export function LoginPage() {
   return (
     <div className="min-h-screen bg-digi-dark relative flex items-center justify-center overflow-hidden">
