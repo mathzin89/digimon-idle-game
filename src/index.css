@@ -1,3 +1,17 @@
-@tailwindcss base;
-@tailwindcss components;
-@tailwindcss utilities;
+/* src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    /* Usando a cor em HEX direto para evitar o block do PostCSS no build */
+    background-color: #0a0f16;
+    color: #cbd5e1;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
