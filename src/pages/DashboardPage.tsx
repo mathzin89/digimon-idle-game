@@ -60,7 +60,7 @@ export function DashboardPage() {
 
   const tamerFrame = walkSequence[frameStep];
 
-  // Motor de Roaming no Mapa
+  // Motor de Roaming no Mapa (Controla as coordenadas X e Y)
   useEffect(() => {
     if (scanningTarget || !mapTargets || mapTargets.length === 0 || !isDataLoaded || !hasCompletedTutorial) return;
 
@@ -102,10 +102,9 @@ export function DashboardPage() {
   // Cronômetro da Cinemática CSS de Scan de DNA
   useEffect(() => {
     if (scanningTarget) {
-      // 2800ms é o tempo exato para a animação CSS completar o "suck-in" antes de voltar ao mapa
       const scanTimer = setTimeout(() => {
         finishDNAScan(scanningTarget);
-      }, 2800);
+      }, 2500); 
       return () => clearTimeout(scanTimer);
     }
   }, [scanningTarget, finishDNAScan]);
@@ -137,43 +136,180 @@ export function DashboardPage() {
   const positions = ['0%', '50%', '100%'];
 
   return (
-    <div className="min-h-screen relative w-full h-screen overflow-hidden bg-emerald-950 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] font-sans selection:bg-digi-cyan/30">
+    // Fundo base verde escuro, caso dê algum erro na imagem
+    <div className="min-h-screen relative w-full h-screen overflow-hidden bg-[#4d9262] font-sans selection:bg-digi-cyan/30">
       
-      {/* ESTILOS CSS INJETADOS PARA A CINEMÁTICA DO DNA SCAN */}
+      {/* NOVOS ESTILOS CSS PARA ABSORÇÃO DO DIGIVICE */}
       <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes slide-in-scanner {
-          0% { transform: translateX(-150px); opacity: 0; }
-          10% { transform: translateX(0); opacity: 1; }
-          90% { transform: translateX(0); opacity: 1; }
-          100% { transform: translateX(-150px); opacity: 0; }
+        @keyframes suckIntoDigivice {
+          0% { transform: translateY(0) scale(1); filter: brightness(1) drop-shadow(0 0 5px cyan); opacity: 0.9; }
+          40% { transform: translateY(60px) scale(0.6); filter: brightness(2) drop-shadow(0 0 15px cyan) hue-rotate(45deg); opacity: 0.7; }
+          100% { transform: translateY(140px) scale(0); filter: brightness(3); opacity: 0; }
         }
-        @keyframes beam-shoot {
-          0% { clip-path: polygon(0 50%, 0 50%, 0 50%, 0 50%); opacity: 0; }
-          15% { clip-path: polygon(0 45%, 100% 0, 100% 100%, 0 55%); opacity: 0.8; }
-          80% { clip-path: polygon(0 45%, 100% 0, 100% 100%, 0 55%); opacity: 0.6; }
-          100% { clip-path: polygon(0 50%, 0 50%, 0 50%, 0 50%); opacity: 0; }
+        @keyframes pulseDNA {
+          from { width: 12px; opacity: 0.6; }
+          to { width: 24px; opacity: 1; }
         }
-        @keyframes digimon-absorb {
-          0% { transform: scale(1) translateX(0); filter: brightness(1) drop-shadow(0 0 10px #00e5ff); opacity: 0; }
-          10% { transform: scale(1) translateX(0); filter: brightness(1.2) drop-shadow(0 0 20px #00e5ff); opacity: 1; }
-          50% { transform: scale(1.1) translateX(0); filter: brightness(2) drop-shadow(0 0 30px #00e5ff) hue-rotate(45deg); opacity: 1; }
-          85% { transform: scale(0.3) translateX(-350px) skewX(20deg); filter: brightness(3) blur(2px); opacity: 0.8; }
-          100% { transform: scale(0) translateX(-450px); filter: brightness(5) blur(10px); opacity: 0; }
+        @keyframes fadeOut {
+          0%, 80% { opacity: 1; }
+          100% { opacity: 0; }
         }
-        @keyframes progress-fill {
-          0% { width: 0%; }
-          70% { width: 100%; }
-          100% { width: 100%; }
-        }
-        @keyframes particle-suck {
-          0% { transform: translateX(0) scale(1); opacity: 0; }
-          20% { opacity: 1; }
-          100% { transform: translateX(-250px) scale(0); opacity: 0; }
+        @keyframes glowDigivice {
+          0% { transform: scale(0.5) translateY(20px); filter: drop-shadow(0 0 0px cyan); opacity: 0; }
+          20% { transform: scale(1) translateY(0); filter: drop-shadow(0 0 10px cyan); opacity: 1; }
+          50%, 80% { transform: scale(1.05); filter: drop-shadow(0 0 25px cyan); opacity: 1; }
+          100% { transform: scale(1); filter: drop-shadow(0 0 5px cyan); opacity: 0; }
         }
       `}} />
 
+      {/* ==================================================== */}
+      {/* 1. MUNDO DO JOGO (SISTEMA DE CÂMERA COM CLAMP)       */}
+      {/* ==================================================== */}
+      <div className="absolute inset-0 z-10 overflow-hidden pointer-events-none">
+        
+        {/* CONTAINER DO MAPA (Tamanho 150vw, com Trava de Câmera) */}
+        <div 
+          className="absolute top-0 left-0 bg-[url('/map-bg.png')] bg-cover bg-center bg-no-repeat transition-transform duration-100 ease-linear [image-rendering:pixelated]"
+          style={{
+            width: '150vw',
+            height: '150vh',
+            // clamp(LIMITE_MINIMO, VALOR_IDEAL, LIMITE_MAXIMO)
+            // Impede que as bordas do mapa entrem pra dentro da tela
+            transform: `translate(
+              clamp(-50vw, calc(50vw - ${tamerPos.x * 1.5}vw), 0vw), 
+              clamp(-50vh, calc(50vh - ${tamerPos.y * 1.5}vh), 0vh)
+            )`
+          }}
+        >
+          
+          {/* O SEU TAMER E SEU DIGIMON ATIVO */}
+          <div 
+            className="absolute flex items-center gap-3 z-30 transition-all duration-100 ease-linear"
+            style={{ top: `${tamerPos.y}%`, left: `${tamerPos.x}%`, transform: 'translate(-50%, -50%)' }}
+          >
+            {/* Tamer + Sombra de Contato */}
+            <div className="relative flex flex-col items-center justify-center">
+              <div 
+                className="pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]" 
+                style={{ 
+                  width: '56px', 
+                  height: '56px', 
+                  backgroundImage: `url('${directionImg}')`,
+                  backgroundSize: '300% 100%',
+                  backgroundPosition: `${positions[tamerFrame]} 0%`,
+                  imageRendering: 'pixelated'
+                }} 
+              />
+              <div className="absolute -bottom-1 w-8 h-2.5 bg-black/40 rounded-[100%] blur-[1.5px] -z-10"></div>
+            </div>
+
+            {/* Digimon + Sombra de Contato */}
+            {activeDigimon && (
+              <div className="relative flex flex-col items-center justify-center">
+                <img 
+                  src={digimonDict[activeDigimon]?.img} 
+                  alt="Seu Digimon" 
+                  className="w-14 h-14 object-contain pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] scale-x-[-1] animate-bounce"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+                <div className="absolute -bottom-1 w-8 h-2.5 bg-black/40 rounded-[100%] blur-[1.5px] -z-10"></div>
+              </div>
+            )}
+          </div>
+
+          {/* MONSTROS ERRANTES ESPALHADOS PELO MAPA (Limitado a 1 para teste) */}
+          {mapTargets && mapTargets.slice(0, 1).map((target) => (
+            <div 
+              key={target.instanceId}
+              className="absolute flex flex-col items-center group transition-all duration-100 ease-linear z-20 pointer-events-auto cursor-pointer"
+              style={{ top: `${target.y}%`, left: `${target.x}%`, transform: 'translate(-50%, -50%)' }}
+            >
+              <div className="relative flex flex-col items-center justify-center">
+                <img 
+                  src={target.image} 
+                  alt={target.name} 
+                  className="relative w-20 h-20 object-contain drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] pixelated animate-bounce z-10"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+                {/* Sombra de Contato Inimigo */}
+                <div className="absolute -bottom-2 w-12 h-3.5 bg-black/40 rounded-[100%] blur-[1.5px] -z-10"></div>
+              </div>
+
+              {/* Barra de Vida Inimigo */}
+              <div className="bg-black/90 px-2 py-0.5 rounded border border-slate-700 text-center mt-1 w-24 shadow-lg">
+                <span className="text-slate-200 text-[10px] font-bold truncate block">{target.name}</span>
+                <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden mt-0.5">
+                  <div className="h-full bg-red-500 transition-all" style={{ width: `${Math.max(0, (target.hp / target.maxHp) * 100)}%` }}></div>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* A ANIMAÇÃO DO DIGIVICE NO LOCAL EXATO ONDE O INIMIGO FOI DERROTADO */}
+          {scanningTarget && (
+            <div
+              className="absolute flex flex-col items-center justify-end z-20 pointer-events-none"
+              style={{
+                top: `${scanningTarget.y}%`,
+                left: `${scanningTarget.x}%`,
+                transform: 'translate(-50%, -85%)',
+                width: '120px',
+                height: '220px'
+              }}
+            >
+              {/* O Digimon derrotado (sendo sugado de cima para baixo) */}
+              <img
+                src={scanningTarget.image}
+                alt={`${scanningTarget.name} derrotado`}
+                className="absolute top-0 w-20 h-20 object-contain pixelated z-30"
+                style={{ animation: 'suckIntoDigivice 2.5s ease-in-out forwards' }}
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+
+              {/* A Espiral de DNA */}
+              <div
+                className="absolute top-[60px] w-[20px] h-[120px] z-20"
+                style={{
+                  background: 'linear-gradient(to bottom, transparent, rgba(0, 255, 255, 0.8), transparent)',
+                  borderRadius: '50%',
+                  filter: 'blur(2px)',
+                  animation: 'pulseDNA 0.5s infinite alternate, fadeOut 2.5s ease-in forwards'
+                }}
+              />
+
+              {/* O Digivice (Feito com CSS) no chão com sombra */}
+              <div
+                className="absolute bottom-0 z-40 flex items-center justify-center drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)]"
+                style={{
+                  width: '64px',
+                  height: '56px',
+                  animation: 'glowDigivice 2.5s ease-in-out forwards'
+                }}
+              >
+                <div className="relative w-full h-full bg-cyan-100 border-[3px] border-slate-700 rounded-[20px] flex items-center justify-center shadow-[inset_0_-5px_0_rgba(0,180,216,0.4)]">
+                  {/* Antena */}
+                  <div className="absolute -top-[10px] left-[10px] w-[8px] h-[12px] bg-slate-700 rounded-t-md"></div>
+                  {/* Anel detalhado em volta da tela */}
+                  <div className="absolute w-[44px] h-[44px] rounded-full border-[2px] border-slate-400/50 flex items-center justify-center">
+                    <div className="w-[26px] h-[26px] bg-emerald-700 border-[2px] border-slate-700 rounded-[4px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"></div>
+                  </div>
+                  {/* Botões Laterais */}
+                  <div className="absolute right-[4px] top-[12px] w-[6px] h-[6px] bg-blue-600 border border-slate-700 rounded-full"></div>
+                  <div className="absolute right-[4px] bottom-[12px] w-[6px] h-[6px] bg-blue-600 border border-slate-700 rounded-full"></div>
+                  <div className="absolute left-[4px] top-[24px] w-[6px] h-[6px] bg-blue-600 border border-slate-700 rounded-full shadow-sm"></div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ==================================================== */}
+      {/* 2. UI DO JOGADOR (FICA PARADA POR CIMA DO MUNDO)     */}
+      {/* ==================================================== */}
+
       {/* MENU SUPERIOR */}
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-40 bg-slate-950/90 border border-slate-700/50 rounded-md p-1.5 flex gap-2 shadow-lg backdrop-blur-sm">
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 bg-slate-950/90 border border-slate-700/50 rounded-md p-1.5 flex gap-2 shadow-lg backdrop-blur-sm pointer-events-auto">
         <button onClick={() => setActiveModal('profile')} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 transition-colors text-sm">👤</button>
         <button onClick={() => setActiveModal('inventory')} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 transition-colors text-sm">🎒</button>
         <button onClick={() => setActiveModal('pc')} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 transition-colors text-sm">💻</button>
@@ -186,7 +322,7 @@ export function DashboardPage() {
       </div>
 
       {/* PAINEL DO JOGADOR E TIME */}
-      <div className="absolute top-4 left-4 w-64 z-40 bg-slate-950/95 border border-slate-700 rounded-md shadow-2xl overflow-hidden flex flex-col">
+      <div className="absolute top-4 left-4 w-64 z-50 bg-slate-950/95 border border-slate-700 rounded-md shadow-2xl overflow-hidden flex flex-col pointer-events-auto">
         <div className="bg-slate-900 border-b border-slate-700 p-2 flex items-center justify-between">
           <div>
             <h2 className="font-bold text-digi-gold text-sm tracking-wider uppercase">{user?.displayName || tamerName}</h2>
@@ -222,7 +358,7 @@ export function DashboardPage() {
       </div>
 
       {/* MINIMAPA */}
-      <div className="absolute top-4 right-4 z-40 flex flex-col gap-3 w-48">
+      <div className="absolute top-4 right-4 z-50 flex flex-col gap-3 w-48 pointer-events-auto">
         <div className="bg-slate-950/95 border border-slate-700 rounded-md shadow-2xl overflow-hidden">
           <div className="bg-slate-900 border-b border-slate-700 p-1 text-center">
             <span className="text-[10px] font-bold text-digi-cyan uppercase tracking-widest">Mundo Aberto</span>
@@ -234,7 +370,7 @@ export function DashboardPage() {
       </div>
 
       {/* HOTKEYS (ITENS) */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex gap-1 bg-slate-950/80 p-1.5 rounded-md border border-slate-700/50 backdrop-blur-sm shadow-2xl">
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex gap-1 bg-slate-950/80 p-1.5 rounded-md border border-slate-700/50 backdrop-blur-sm shadow-2xl pointer-events-auto">
         {[ 
           { key: '1', id: 'meat', icon: '🍖', amount: items?.meat || 0 }, 
           { key: '2', id: 'scan', icon: '💾', amount: items?.scan || 0 }, 
@@ -248,123 +384,9 @@ export function DashboardPage() {
         ))}
       </div>
 
-      {/* === MAPA ABERTO E NOVA CUTSCENE DE ABSORÇÃO (100% CÓDIGO/DOM) === */}
-      <div className="absolute inset-0 z-10 overflow-hidden">
-        {scanningTarget ? (
-          <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-50">
-            <div className="relative w-[800px] h-[400px] flex items-center justify-center">
-              
-              {/* Arma do Scanner (Entra da esquerda e fica) */}
-              <img 
-                src="/scanner.png" 
-                alt="DNA Scanner" 
-                className="absolute left-[50px] z-30 w-72 drop-shadow-[0_0_15px_rgba(0,229,255,0.4)]"
-                style={{ animation: 'slide-in-scanner 2.8s ease-in-out forwards' }}
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-
-              {/* Feixe de Luz Holográfica (Abre como um cone) */}
-              <div 
-                className="absolute left-[280px] w-[300px] h-[200px] bg-gradient-to-r from-cyan-400/80 via-cyan-400/30 to-transparent z-10 filter blur-sm"
-                style={{ animation: 'beam-shoot 2.8s ease-in-out forwards' }}
-              />
-
-              {/* Partículas voando para dentro da arma */}
-              <div className="absolute left-[300px] w-[250px] h-[150px] z-20 pointer-events-none overflow-hidden">
-                {[...Array(15)].map((_, i) => (
-                  <div 
-                    key={i} 
-                    className="absolute w-2 h-2 bg-cyan-300 shadow-[0_0_5px_white]"
-                    style={{
-                      top: `${Math.random() * 100}%`,
-                      left: '100%',
-                      animation: `particle-suck 0.6s linear infinite ${Math.random() * 1.5}s`
-                    }}
-                  />
-                ))}
-              </div>
-
-              {/* O Digimon (Do lado direito, encolhendo e sendo sugado para a esquerda) */}
-              <div 
-                className="absolute right-[100px] z-20 flex flex-col items-center"
-                style={{ animation: 'digimon-absorb 2.8s ease-in-out forwards' }}
-              >
-                <img 
-                  src={scanningTarget.image} 
-                  alt={scanningTarget.name} 
-                  className="w-32 h-32 object-contain pixelated"
-                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                />
-              </div>
-
-              {/* HUD / Barrinha Embaixo do Scanner */}
-              <div className="absolute bottom-[20px] left-[50px] bg-slate-900 border border-cyan-500/50 p-3 rounded text-center w-72 shadow-[0_0_20px_rgba(0,229,255,0.2)] animate-[slide-in-scanner_2.8s_ease-in-out_forwards]">
-                <h2 className="text-digi-cyan font-black text-sm tracking-widest uppercase mb-1">SCAN V1.1</h2>
-                <p className="text-slate-400 font-mono text-[10px] mb-2 uppercase tracking-wider text-left">Extraindo: {scanningTarget.name}</p>
-                <div className="w-full h-2 bg-slate-950 border border-slate-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-cyan-400 rounded-full shadow-[0_0_10px_#00e5ff]" style={{ animation: 'progress-fill 2.8s linear forwards' }}></div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        ) : (
-          <div className="relative w-full h-full">
-            
-            {/* O SEU TAMER COM CAMINHADA FLUIDA */}
-            <div 
-              className="absolute flex items-center gap-3 z-20 pointer-events-none transition-all duration-100 ease-linear"
-              style={{ top: `${tamerPos.y}%`, left: `${tamerPos.x}%`, transform: 'translate(-50%, -50%)' }}
-            >
-              <div 
-                className="pixelated drop-shadow-[0_6px_6px_rgba(0,0,0,0.7)]" 
-                style={{ 
-                  width: '56px', 
-                  height: '56px', 
-                  backgroundImage: `url('${directionImg}')`,
-                  backgroundSize: '300% 100%',
-                  backgroundPosition: `${positions[tamerFrame]} 0%`,
-                  imageRendering: 'pixelated'
-                }} 
-              />
-              {activeDigimon && (
-                <img 
-                  src={digimonDict[activeDigimon]?.img} 
-                  alt="Seu Digimon" 
-                  className="w-14 h-14 object-contain pixelated drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)] scale-x-[-1] animate-bounce"
-                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                />
-              )}
-            </div>
-
-            {/* MONSTROS ERRANTES ESPALHADOS PELO MAPA */}
-            {mapTargets && mapTargets.map((target) => (
-              <div 
-                key={target.instanceId}
-                className="absolute flex flex-col items-center cursor-pointer group transition-all z-30"
-                style={{ top: `${target.y}%`, left: `${target.x}%`, transform: 'translate(-50%, -50%)' }}
-              >
-                <img 
-                  src={target.image} 
-                  alt={target.name} 
-                  className="w-20 h-20 object-contain drop-shadow-[0_10px_10px_rgba(0,0,0,0.8)] pixelated animate-bounce"
-                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                />
-                <div className="bg-black/90 px-2 py-0.5 rounded border border-slate-700 text-center mt-1 w-24 shadow-lg">
-                  <span className="text-slate-200 text-[10px] font-bold truncate block">{target.name}</span>
-                  <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden mt-0.5">
-                    <div className="h-full bg-red-500 transition-all" style={{ width: `${Math.max(0, (target.hp / target.maxHp) * 100)}%` }}></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* === MODAIS COMPLETOS === */}
       {activeModal && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto">
           <div className="bg-slate-950 border border-slate-700 w-[600px] rounded-lg shadow-2xl flex flex-col overflow-hidden">
             
             <div className="bg-slate-900 border-b border-slate-800 p-3 flex justify-between items-center">
