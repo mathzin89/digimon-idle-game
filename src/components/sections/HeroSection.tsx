@@ -1,5 +1,6 @@
 // src/components/sections/HeroSection.tsx
 import React from 'react';
+import { Link } from 'react-router-dom'; // <-- IMPORTAÇÃO NOVA AQUI
 import { Button } from '../ui/Button';
 import splashBg from '../../assets/splash-bg.png';
 
@@ -7,15 +8,13 @@ export function HeroSection() {
   return (
     <section className="relative min-h-screen flex flex-col items-center justify-center pt-24 overflow-hidden">
       
-      {/* Background Épico - Corrigido para valorizar a arte */}
+      {/* Background Épico */}
       <div className="absolute inset-0 z-0">
-        {/* Imagem agora com 100% de opacidade e nitidez */}
         <img 
           src={splashBg} 
           alt="Digital World Splash Art" 
           className="w-full h-full object-cover"
         />
-        {/* Overlay em gradiente: escurece o topo (navbar), deixa o meio mais limpo e escurece a base (status) */}
         <div className="absolute inset-0 bg-gradient-to-b from-digi-dark/80 via-digi-dark/40 to-digi-dark z-10"></div>
       </div>
 
@@ -35,13 +34,18 @@ export function HeroSection() {
           Entre no Digital World onde Tamers poderosos, batalhas intensas e desafios imprevisíveis moldam cada passo da sua jornada — a progressão é automática e a imersão é total, direto do seu navegador.
         </p>
         
+        {/* BOTÕES COM OS LINKS DE ROTA AQUI */}
         <div className="flex flex-col sm:flex-row gap-6">
-          <Button variant="primary" className="px-10 py-4 text-lg">
-            JOGAR AGORA
-          </Button>
-          <Button variant="outline" className="px-10 py-4 text-lg border-slate-600 text-slate-300 shadow-none hover:bg-slate-800 hover:border-slate-400">
-            CRIAR CONTA
-          </Button>
+          <Link to="/login">
+            <Button variant="primary" className="px-10 py-4 text-lg w-full sm:w-auto">
+              JOGAR AGORA
+            </Button>
+          </Link>
+          <Link to="/register">
+            <Button variant="outline" className="px-10 py-4 text-lg border-slate-600 text-slate-300 shadow-none hover:bg-slate-800 hover:border-slate-400 w-full sm:w-auto">
+              CRIAR CONTA
+            </Button>
+          </Link>
         </div>
       </div>
 

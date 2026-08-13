@@ -1,21 +1,38 @@
 // src/App.tsx
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { LandingPage } from './pages/LandingPage';
-import { LoginPage } from './pages/LoginPage';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
-function App() {
+// Importação das Telas
+import { LandingPage } from './pages/LandingPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
+
+// Importação da Rota Protegida e do Zustand (Porteiro)
+import { ProtectedRoute } from './components/layout/ProtectedRoute';
+import { useAuthStore } from './store/useAuthStore';
+
+export default function App() {
+  const { initAuthListener } = useAuthStore();
+
+  // Liga o radar do Firebase assim que o App monta
+  useEffect(() => {
+    initAuthListener();
+  }, [initAuthListener]);
+
   return (
-    <Router>
+    <BrowserRouter>
       <Routes>
-        {/* Rota principal: A Landing Page */}
+        {/* === ROTAS PÚBLICAS === */}
         <Route path="/" element={<LandingPage />} />
-        
-        {/* Rota de Login: A tela que acabamos de criar */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+
+        {/* === ROTAS PRIVADAS (Protegidas pelo Firebase) === */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/dashboard" element={<DashboardPage />} />
+        </Route>
       </Routes>
-    </Router>
+    </BrowserRouter>
   );
 }
-
-export default App;
