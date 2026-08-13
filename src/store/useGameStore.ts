@@ -95,18 +95,40 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { currentHuntType, mapTargets } = get();
     if (!currentHuntType || mapTargets.length >= 7) return;
 
-    const hp = currentHuntType.level * 30;
+    // O Segredo da Colisão no Idle: Restringir a área de Spawn para o Caminho de Terra!
+    const x = Math.floor(Math.random() * 50) + 25; // Entre 25% e 75% da largura do mapa
+    const y = Math.floor(Math.random() * 30) + 40; // Entre 40% e 70% da altura do mapa
+
+    // Randomizador de Inimigos
+    const rand = Math.random();
+    let targetId = currentHuntType.id;
+    let targetName = currentHuntType.name;
+    let targetImage = currentHuntType.image;
+    let targetLevel = currentHuntType.level;
+    let rarity: 'Normal' | 'Elite' | 'Chefe' = currentHuntType.rarity || 'Normal';
+
+    if (rand > 0.9) { 
+      // 10% de chance de nascer um Greymon Boss
+      targetId = 'greymon'; targetName = 'Greymon'; targetImage = '/greymon.gif'; targetLevel = 15; rarity = 'Chefe';
+    } else if (rand > 0.5) { 
+      // 40% de chance de nascer o Agumon
+      targetId = 'agumon'; targetName = 'Agumon'; targetImage = '/agumon.gif'; targetLevel = 8; rarity = 'Normal';
+    }
+
+    // O Boss tem muito mais vida!
+    const hp = targetLevel * (rarity === 'Chefe' ? 100 : 30);
+
     const newTarget: MapTarget = {
-      instanceId: `${currentHuntType.id}_${Date.now()}_${Math.random()}`,
-      id: currentHuntType.id,
-      name: currentHuntType.name,
-      level: currentHuntType.level,
+      instanceId: `${targetId}_${Date.now()}_${Math.random()}`,
+      id: targetId,
+      name: targetName,
+      level: targetLevel,
       hp,
       maxHp: hp,
-      image: currentHuntType.image,
-      rarity: currentHuntType.rarity,
-      x: Math.floor(Math.random() * 75) + 12,
-      y: Math.floor(Math.random() * 70) + 15
+      image: targetImage,
+      rarity,
+      x,
+      y
     };
 
     set({ mapTargets: [...get().mapTargets, newTarget] });
