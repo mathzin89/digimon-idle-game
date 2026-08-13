@@ -1,7 +1,18 @@
 // src/store/useGameStore.ts
 import { create } from 'zustand';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 
-interface Enemy {
+interface DigimonStats {
+  level: number;
+  exp: number;
+  maxExp: number;
+  hp: number;
+  maxHp: number;
+}
+
+interface MapTarget {
+  instanceId: string;
   id: string;
   name: string;
   level: number;
@@ -9,128 +20,321 @@ interface Enemy {
   maxHp: number;
   image: string;
   rarity: 'Normal' | 'Elite' | 'Chefe';
+  x: number;
+  y: number;
 }
 
-interface MyDigimon {
+interface CaptureLogEntry {
+  name: string;
   level: number;
-  exp: number;
-  maxExp: number;
+  timestamp: string;
 }
 
 interface GameState {
   tamerName: string;
   bits: number;
   gems: number;
-  currentEnemy: Enemy | null;
+  avatar: string;
+  equippedOutfit: string;
+  ownedOutfits: string[];
+  captureLog: CaptureLogEntry[];
+  mapTargets: MapTarget[];
+  currentHuntType: { id: string; name: string; level: number; image: string; rarity: 'Normal' | 'Elite' | 'Chefe' } | null;
+  scanningTarget: MapTarget | null;
+  fragments: Record<string, number>;
+  ownedDigimons: string[];
+  myDigimons: Record<string, DigimonStats>;
+  activeDigimon: string;
+  items: Record<string, number>;
+  isDataLoaded: boolean;
+  hasCompletedTutorial: boolean;
   
-  fragments: Record<string, number>; 
-  ownedDigimons: string[]; 
-  myDigimons: Record<string, MyDigimon>; // Guarda o Nível e EXP de cada monstro seu
-  activeDigimon: string; // Quem está batalhando agora
-  items: Record<string, number>; // Quantidade de Carnes, Poções, etc.
-  
-  setHunt: (id: string, name: string, level: number, image: string) => void;
-  dealDamage: (amount: number) => void;
+  setMapHunt: (id: string, name: string, level: number, image: string, rarity?: 'Normal' | 'Elite' | 'Chefe') => void;
+  spawnSingleTarget: () => void;
+  attackMapTarget: (targetInstanceId: string, damage: number) => void;
+  finishDNAScan: (target: MapTarget) => void;
   synthesizeDigimon: (id: string) => void;
-  setActiveDigimon: (id: string) => void; // Trocar o líder
+  setActiveDigimon: (id: string) => void;
   buyItem: (itemId: string, cost: number, currency: 'bits' | 'gems', amount: number) => void;
   useItem: (itemId: string) => void;
+  equipOutfit: (outfitId: string) => void;
+  buyOutfit: (outfitId: string, cost: number) => boolean;
+  addCaptureLog: (name: string, level: number) => void;
+  completeTutorial: (uid: string, gender: 'male' | 'female', starterId: string) => Promise<void>;
+  loadProgress: (uid: string) => Promise<void>;
+  saveProgress: (uid: string) => Promise<void>;
 }
 
-export const useGameStore = create<GameState>((set) => ({
-  tamerName: 'Matheus',
-  bits: 5000, // Começamos com Bits para você testar a Loja
-  gems: 0,
-  currentEnemy: null,
-  fragments: {}, 
-  ownedDigimons: ['agumon'], 
-  myDigimons: {
-    'agumon': { level: 1, exp: 0, maxExp: 100 }
+export const useGameStore = create<GameState>((set, get) => ({
+  tamerName: 'Tamer',
+  bits: 500,
+  gems: 50,
+  avatar: 'tai',
+  equippedOutfit: 'default',
+  ownedOutfits: ['default'],
+  captureLog: [],
+  mapTargets: [],
+  currentHuntType: null,
+  scanningTarget: null,
+  fragments: {},
+  ownedDigimons: [],
+  myDigimons: {},
+  activeDigimon: '',
+  items: { meat: 5, scan: 2, potion: 3 },
+  isDataLoaded: false,
+  hasCompletedTutorial: false,
+
+  setMapHunt: (id, name, level, image, rarity = 'Normal') => {
+    set({ currentHuntType: { id, name, level, image, rarity }, mapTargets: [], scanningTarget: null });
+    for (let i = 0; i < 4; i++) {
+      get().spawnSingleTarget();
+    }
   },
-  activeDigimon: 'agumon',
-  items: { meat: 5, scan: 2, potion: 3 }, // Inventário inicial
 
-  setHunt: (id, name, level, image) => set({
-    currentEnemy: { id, name, level, hp: 100 * level, maxHp: 100 * level, image, rarity: 'Normal' }
-  }),
+  spawnSingleTarget: () => {
+    const { currentHuntType, mapTargets } = get();
+    if (!currentHuntType || mapTargets.length >= 7) return;
 
-  // Define quem vai lutar
-  setActiveDigimon: (id) => set({ activeDigimon: id }),
+    const hp = currentHuntType.level * 30;
+    const newTarget: MapTarget = {
+      instanceId: `${currentHuntType.id}_${Date.now()}_${Math.random()}`,
+      id: currentHuntType.id,
+      name: currentHuntType.name,
+      level: currentHuntType.level,
+      hp,
+      maxHp: hp,
+      image: currentHuntType.image,
+      rarity: currentHuntType.rarity,
+      x: Math.floor(Math.random() * 75) + 12,
+      y: Math.floor(Math.random() * 70) + 15
+    };
 
-  // Lógica da Loja (Desconta moedas e adiciona itens)
-  buyItem: (itemId, cost, currency, amount) => set((state) => {
+    set({ mapTargets: [...get().mapTargets, newTarget] });
+  },
+
+  attackMapTarget: (targetInstanceId, damage) => {
+    const { mapTargets } = get();
+    
+    const updated = mapTargets.map((target) => {
+      if (target.instanceId === targetInstanceId) {
+        return { ...target, hp: target.hp - damage };
+      }
+      return target;
+    });
+
+    const defeated = updated.find(t => t.instanceId === targetInstanceId && t.hp <= 0);
+
+    if (defeated) {
+      const remainingTargets = updated.filter(t => t.instanceId !== targetInstanceId);
+      set({ 
+        mapTargets: remainingTargets,
+        scanningTarget: defeated
+      });
+
+      setTimeout(() => {
+        get().spawnSingleTarget();
+      }, 800);
+    } else {
+      set({ mapTargets: updated });
+    }
+  },
+
+  finishDNAScan: (target) => {
+    const { myDigimons, activeDigimon, addCaptureLog } = get();
+    
+    addCaptureLog(target.name, target.level);
+    
+    const currentStats = myDigimons[activeDigimon] || { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100 };
+    const earnedExp = target.level * 20;
+    const newExp = currentStats.exp + earnedExp;
+    
+    let newLevel = currentStats.level;
+    let newMaxExp = currentStats.maxExp;
+    let finalExp = newExp;
+
+    if (newExp >= newMaxExp) {
+      newLevel += 1;
+      finalExp = newExp - newMaxExp;
+      newMaxExp = Math.floor(newMaxExp * 1.5);
+    }
+
+    set((state) => ({
+      bits: state.bits + (target.level * 25),
+      fragments: {
+        ...state.fragments,
+        [target.id]: (state.fragments[target.id] || 0) + 15
+      },
+      myDigimons: {
+        ...state.myDigimons,
+        [activeDigimon]: {
+          ...currentStats,
+          level: newLevel,
+          exp: finalExp,
+          maxExp: newMaxExp
+        }
+      },
+      scanningTarget: null
+    }));
+  },
+
+  synthesizeDigimon: (id) => {
+    const { fragments, ownedDigimons, myDigimons } = get();
+    const count = fragments[id] || 0;
+    if (count >= 50 && !ownedDigimons.includes(id)) {
+      set({
+        fragments: { ...fragments, [id]: count - 50 },
+        ownedDigimons: [...ownedDigimons, id],
+        myDigimons: {
+          ...myDigimons,
+          [id]: { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100 }
+        },
+        activeDigimon: get().activeDigimon || id
+      });
+    }
+  },
+
+  setActiveDigimon: (id) => {
+    if (get().ownedDigimons.includes(id)) {
+      set({ activeDigimon: id });
+    }
+  },
+
+  buyItem: (itemId, cost, currency, amount) => {
+    const state = get();
     if (currency === 'bits' && state.bits >= cost) {
-      return { bits: state.bits - cost, items: { ...state.items, [itemId]: (state.items[itemId] || 0) + amount } };
+      set({
+        bits: state.bits - cost,
+        items: { ...state.items, [itemId]: (state.items[itemId] || 0) + amount }
+      });
+    } else if (currency === 'gems' && state.gems >= cost) {
+      set({
+        gems: state.gems - cost,
+        items: { ...state.items, [itemId]: (state.items[itemId] || 0) + amount }
+      });
     }
-    if (currency === 'gems' && state.gems >= cost) {
-      return { gems: state.gems - cost, items: { ...state.items, [itemId]: (state.items[itemId] || 0) + amount } };
+  },
+
+  useItem: (itemId) => {
+    const { items } = get();
+    if ((items[itemId] || 0) > 0) {
+      set({
+        items: { ...items, [itemId]: items[itemId] - 1 }
+      });
     }
-    return state; // Retorna sem fazer nada se não tiver dinheiro
-  }),
+  },
 
-  // Lógica das Hotkeys (Consome o item da mochila)
-  useItem: (itemId) => set((state) => {
-    if ((state.items[itemId] || 0) > 0) {
-      console.log(`Usou o item: ${itemId}`);
-      return { items: { ...state.items, [itemId]: state.items[itemId] - 1 } };
+  equipOutfit: (outfitId) => {
+    set({ equippedOutfit: outfitId });
+  },
+
+  buyOutfit: (outfitId, cost) => {
+    const { gems, ownedOutfits } = get();
+    if (gems >= cost && !ownedOutfits.includes(outfitId)) {
+      set({
+        gems: gems - cost,
+        ownedOutfits: [...ownedOutfits, outfitId],
+        equippedOutfit: outfitId
+      });
+      return true;
     }
-    return state;
-  }),
+    return false;
+  },
 
-  // Converter fragmentos em um Digimon nível 1
-  synthesizeDigimon: (id) => set((state) => {
-    const currentFrags = state.fragments[id] || 0;
-    if (currentFrags >= 50 && !state.ownedDigimons.includes(id)) {
-      return {
-        fragments: { ...state.fragments, [id]: currentFrags - 50 },
-        ownedDigimons: [...state.ownedDigimons, id],
-        myDigimons: { ...state.myDigimons, [id]: { level: 1, exp: 0, maxExp: 100 } }
-      };
-    }
-    return state;
-  }),
+  addCaptureLog: (name, level) => {
+    const newEntry = {
+      name,
+      level,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    };
+    set((state) => ({
+      captureLog: [newEntry, ...state.captureLog.slice(0, 49)]
+    }));
+  },
 
-  dealDamage: (amount) => set((state) => {
-    if (!state.currentEnemy) return state;
-    const newHp = state.currentEnemy.hp - amount;
-
-    if (newHp <= 0) {
-      // 1. Drop de Fragmento
-      let newFragments = { ...state.fragments };
-      if (Math.random() > 0.80) {
-        newFragments[state.currentEnemy.id] = (newFragments[state.currentEnemy.id] || 0) + 1;
+  completeTutorial: async (uid, gender, starterId) => {
+    const newState = {
+      avatar: gender === 'female' ? 'sora' : 'tai',
+      hasCompletedTutorial: true,
+      ownedDigimons: [starterId],
+      activeDigimon: starterId,
+      myDigimons: {
+        [starterId]: { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100 }
       }
+    };
 
-      // 2. RNG do Próximo Monstro
-      const spawnRoll = Math.random();
-      let rarity: 'Normal' | 'Elite' | 'Chefe' = 'Normal';
-      let multiplier = 1;
-      if (spawnRoll > 0.98) { rarity = 'Chefe'; multiplier = 10; }
-      else if (spawnRoll > 0.90) { rarity = 'Elite'; multiplier = 3; }
+    set(newState);
+    get().setMapHunt('koromon', 'Koromon', 5, '/koromon.gif', 'Normal');
 
-      const nextMaxHp = 100 * state.currentEnemy.level * multiplier;
-      const bitsReward = 15 * state.currentEnemy.level * multiplier;
-      
-      // 3. Sistema de EXP e Level UP
-      const expReward = 35 * state.currentEnemy.level * multiplier;
-      let updatedMyDigimons = { ...state.myDigimons };
-      let activeStats = { ...updatedMyDigimons[state.activeDigimon] };
-      
-      activeStats.exp += expReward;
-      if (activeStats.exp >= activeStats.maxExp) {
-        activeStats.level += 1;
-        activeStats.exp = 0; // Zera a EXP (ou subtrai)
-        activeStats.maxExp = Math.floor(activeStats.maxExp * 1.5); // Próximo nível mais difícil
-      }
-      updatedMyDigimons[state.activeDigimon] = activeStats;
-
-      return {
-        bits: state.bits + bitsReward,
-        fragments: newFragments,
-        myDigimons: updatedMyDigimons,
-        currentEnemy: { ...state.currentEnemy, hp: nextMaxHp, maxHp: nextMaxHp, rarity }
-      };
+    try {
+      await setDoc(doc(db, 'users', uid), {
+        ...newState,
+        bits: get().bits,
+        gems: get().gems,
+        items: get().items,
+        equippedOutfit: get().equippedOutfit,
+        ownedOutfits: get().ownedOutfits,
+        captureLog: get().captureLog
+      }, { merge: true });
+    } catch (error) {
+      console.error('Erro ao salvar tutorial:', error);
     }
-    return { currentEnemy: { ...state.currentEnemy, hp: newHp } };
-  })
+  },
+
+  loadProgress: async (uid) => {
+    try {
+      const docRef = doc(db, 'users', uid);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        set({
+          bits: data.bits ?? 500,
+          gems: data.gems ?? 50,
+          avatar: data.avatar ?? 'tai',
+          equippedOutfit: data.equippedOutfit ?? 'default',
+          ownedOutfits: data.ownedOutfits ?? ['default'],
+          captureLog: data.captureLog ?? [],
+          fragments: data.fragments ?? {},
+          ownedDigimons: data.ownedDigimons ?? [],
+          myDigimons: data.myDigimons ?? {},
+          activeDigimon: data.activeDigimon ?? '',
+          items: data.items ?? { meat: 5, scan: 2, potion: 3 },
+          hasCompletedTutorial: data.hasCompletedTutorial ?? false,
+          isDataLoaded: true
+        });
+
+        if (data.hasCompletedTutorial && (!get().mapTargets || get().mapTargets.length === 0)) {
+          get().setMapHunt('koromon', 'Koromon', 5, '/koromon.gif', 'Normal');
+        }
+
+      } else {
+        set({ isDataLoaded: true, hasCompletedTutorial: false });
+      }
+    } catch (error) {
+      console.error('Erro ao carregar progresso:', error);
+      set({ isDataLoaded: true });
+    }
+  },
+
+  saveProgress: async (uid) => {
+    try {
+      const state = get();
+      await setDoc(doc(db, 'users', uid), {
+        bits: state.bits,
+        gems: state.gems,
+        avatar: state.avatar,
+        equippedOutfit: state.equippedOutfit,
+        ownedOutfits: state.ownedOutfits,
+        captureLog: state.captureLog,
+        fragments: state.fragments,
+        ownedDigimons: state.ownedDigimons,
+        myDigimons: state.myDigimons,
+        activeDigimon: state.activeDigimon,
+        items: state.items,
+        hasCompletedTutorial: state.hasCompletedTutorial
+      }, { merge: true });
+    } catch (error) {
+      console.error('Erro ao salvar progresso:', error);
+    }
+  }
 }));
