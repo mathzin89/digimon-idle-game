@@ -19,7 +19,7 @@ interface MapTarget {
   hp: number;
   maxHp: number;
   image: string;
-  rarity: 'Normal' | 'Elite' | 'Chefe';
+  rarity: 'Normal' | 'Elite' | 'Chefe' | 'Divino'; // NOVIDADE: Adicionado Divino
   x: number;
   y: number;
 }
@@ -28,6 +28,13 @@ interface CaptureLogEntry {
   name: string;
   level: number;
   timestamp: string;
+}
+
+interface LootResult {
+  exp: number;
+  bits: number;
+  item: string | null;
+  leveledUp: boolean;
 }
 
 interface GameState {
@@ -39,7 +46,7 @@ interface GameState {
   ownedOutfits: string[];
   captureLog: CaptureLogEntry[];
   mapTargets: MapTarget[];
-  currentHuntType: { id: string; name: string; level: number; image: string; rarity: 'Normal' | 'Elite' | 'Chefe' } | null;
+  currentHuntType: { id: string; name: string; level: number; image: string; rarity: 'Normal' | 'Elite' | 'Chefe' | 'Divino' } | null;
   scanningTarget: MapTarget | null;
   fragments: Record<string, number>;
   ownedDigimons: string[];
@@ -49,10 +56,10 @@ interface GameState {
   isDataLoaded: boolean;
   hasCompletedTutorial: boolean;
   
-  setMapHunt: (id: string, name: string, level: number, image: string, rarity?: 'Normal' | 'Elite' | 'Chefe') => void;
+  setMapHunt: (id: string, name: string, level: number, image: string, rarity?: 'Normal' | 'Elite' | 'Chefe' | 'Divino') => void;
   spawnSingleTarget: () => void;
   attackMapTarget: (targetInstanceId: string, damage: number) => void;
-  finishDNAScan: (target: MapTarget) => void;
+  finishDNAScan: (target: MapTarget) => LootResult; // NOVIDADE: Retorna os drops para a UI
   synthesizeDigimon: (id: string) => void;
   setActiveDigimon: (id: string) => void;
   buyItem: (itemId: string, cost: number, currency: 'bits' | 'gems', amount: number) => void;
@@ -95,37 +102,33 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { currentHuntType, mapTargets } = get();
     if (!currentHuntType || mapTargets.length >= 7) return;
 
-    // O Segredo da Colisão no Idle: Restringir a área de Spawn para o Caminho de Terra!
-    const x = Math.floor(Math.random() * 50) + 25; // Entre 25% e 75% da largura do mapa
-    const y = Math.floor(Math.random() * 30) + 40; // Entre 40% e 70% da altura do mapa
+    const x = Math.floor(Math.random() * 50) + 25; 
+    const y = Math.floor(Math.random() * 30) + 40; 
 
-    // Randomizador de Inimigos
+    // NOVIDADE: Sistema de Spawn com Raridades e Anjos
     const rand = Math.random();
-    let targetId = currentHuntType.id;
-    let targetName = currentHuntType.name;
-    let targetImage = currentHuntType.image;
-    let targetLevel = currentHuntType.level;
-    let rarity: 'Normal' | 'Elite' | 'Chefe' = currentHuntType.rarity || 'Normal';
+    let { id, name, image, level, rarity } = currentHuntType;
 
-    if (rand > 0.9) { 
-      // 10% de chance de nascer um Greymon Boss
-      targetId = 'greymon'; targetName = 'Greymon'; targetImage = '/greymon.gif'; targetLevel = 15; rarity = 'Chefe';
-    } else if (rand > 0.5) { 
-      // 40% de chance de nascer o Agumon
-      targetId = 'agumon'; targetName = 'Agumon'; targetImage = '/agumon.gif'; targetLevel = 8; rarity = 'Normal';
+    if (rand > 0.98 && id === 'patamon') {
+       // 2% de chance de nascer o Divino se estiver no local do Patamon
+       id = 'angemon'; name = 'Angemon'; image = 'https://wikimon.net/images/c/ce/Angemon_b_ds.gif'; level += 30; rarity = 'Divino';
+    } else if (rand > 0.92) {
+       rarity = 'Chefe'; level += 10;
+    } else if (rand > 0.80) {
+       rarity = 'Elite'; level += 5;
     }
 
-    // O Boss tem muito mais vida!
-    const hp = targetLevel * (rarity === 'Chefe' ? 100 : 30);
+    const hpMultiplier = rarity === 'Divino' ? 150 : rarity === 'Chefe' ? 100 : rarity === 'Elite' ? 50 : 30;
+    const hp = level * hpMultiplier;
 
     const newTarget: MapTarget = {
-      instanceId: `${targetId}_${Date.now()}_${Math.random()}`,
-      id: targetId,
-      name: targetName,
-      level: targetLevel,
+      instanceId: `${id}_${Date.now()}_${Math.random()}`,
+      id,
+      name,
+      level,
       hp,
       maxHp: hp,
-      image: targetImage,
+      image,
       rarity,
       x,
       y
@@ -162,26 +165,46 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   finishDNAScan: (target) => {
-    const { myDigimons, activeDigimon, addCaptureLog } = get();
+    const { myDigimons, activeDigimon, addCaptureLog, items } = get();
     
     addCaptureLog(target.name, target.level);
     
     const currentStats = myDigimons[activeDigimon] || { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100 };
-    const earnedExp = target.level * 20;
+    
+    // XP e Nível
+    const rarityExpMult = target.rarity === 'Divino' ? 10 : target.rarity === 'Chefe' ? 5 : target.rarity === 'Elite' ? 2 : 1;
+    const earnedExp = target.level * 20 * rarityExpMult;
     const newExp = currentStats.exp + earnedExp;
     
     let newLevel = currentStats.level;
     let newMaxExp = currentStats.maxExp;
     let finalExp = newExp;
+    let leveledUp = false;
 
     if (newExp >= newMaxExp) {
       newLevel += 1;
       finalExp = newExp - newMaxExp;
       newMaxExp = Math.floor(newMaxExp * 1.5);
+      leveledUp = true;
+    }
+
+    // Economia e Drops (Tabela de Loot)
+    const earnedBits = target.level * 25 * rarityExpMult;
+    
+    let droppedItem = null;
+    const randItem = Math.random();
+    if (randItem > 0.95) droppedItem = 'scan';
+    else if (randItem > 0.85) droppedItem = 'potion';
+    else if (randItem > 0.70) droppedItem = 'meat';
+
+    const newItems = { ...items };
+    if (droppedItem) {
+      newItems[droppedItem] = (newItems[droppedItem] || 0) + 1;
     }
 
     set((state) => ({
-      bits: state.bits + (target.level * 25),
+      bits: state.bits + earnedBits,
+      items: newItems,
       fragments: {
         ...state.fragments,
         [target.id]: (state.fragments[target.id] || 0) + 15
@@ -197,6 +220,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       },
       scanningTarget: null
     }));
+
+    return { exp: earnedExp, bits: earnedBits, item: droppedItem, leveledUp };
   },
 
   synthesizeDigimon: (id) => {
@@ -285,7 +310,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     };
 
     set(newState);
-    get().setMapHunt('koromon', 'Koromon', 5, '/koromon.gif', 'Normal');
+    get().setMapHunt('koromon', 'Koromon', 1, '/koromon.gif', 'Normal'); // Atualizado para level 1
 
     try {
       await setDoc(doc(db, 'users', uid), {
@@ -326,7 +351,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
 
         if (data.hasCompletedTutorial && (!get().mapTargets || get().mapTargets.length === 0)) {
-          get().setMapHunt('koromon', 'Koromon', 5, '/koromon.gif', 'Normal');
+          get().setMapHunt('koromon', 'Koromon', 1, '/koromon.gif', 'Normal');
         }
 
       } else {

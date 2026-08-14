@@ -3,10 +3,10 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/useGameStore';
 import { useAuthStore } from '../store/useAuthStore';
-import { TamerPortrait } from '../components/ui/TamerPortrait'; // IMPORT ATUALIZADO AQUI!
+import { TamerPortrait } from '../components/ui/TamerPortrait';
 
 const STARTERS = [
-  { id: 'agumon', name: 'Agumon', type: 'Fogo', img: '/agumon-init.png', desc: 'Ataque alto. Perfeito para combates agressivos.' },
+  { id: 'agumon', name: 'Koromon', type: 'Fogo', img: '/koromon-init.png', desc: 'Ataque alto. Evolui para Agumon no Nível 30.' },
   { id: 'gabumon', name: 'Gabumon', type: 'Água/Gelo', img: 'https://wikimon.net/images/4/4d/Gabumon_b_ds.gif', desc: 'Equilibrado. Boa resistência e ataques precisos.' },
   { id: 'palmon', name: 'Palmon', type: 'Planta', img: 'https://wikimon.net/images/6/69/Palmon_b_ds.gif', desc: 'Tático. Foca em efeitos e suporte a longo prazo.' }
 ];
@@ -30,29 +30,24 @@ export function InitiationPage() {
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center relative overflow-hidden font-sans selection:bg-digi-cyan/30">
       
-      {/* ESTILOS DA ANIMAÇÃO DO SPRITE CORRIGIDOS E 100% FLUIDOS */}
       <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes rugidoAgumon {
-          0%, 30% { background-position: 0% 0%; }    /* Frame 1 */
-          31%, 65% { background-position: 50% 0%; }  /* Frame 2 */
-          66%, 100% { background-position: 100% 0%; } /* Frame 3 */
+        @keyframes rugidoKoromon {
+          0%, 45% { background-position: 0% 0%; }
+          50%, 100% { background-position: 100% 0%; }
         }
         
-        .agumon-starter {
-          width: 90px; 
-          height: 90px;
-          background-image: url('/agumon-init.png');
-          background-size: 300% 100%; /* 3 frames exatos na imagem */
+        .koromon-starter {
+          width: 80px; 
+          height: 80px;
+          background-image: url('/koromon-init.png');
+          background-size: 200% 100%; /* 2 frames */
           background-repeat: no-repeat;
           image-rendering: pixelated;
-          
-          /* Roda a animação 1 vez ao carregar a tela e para no último frame (forwards) */
-          animation: rugidoAgumon 0.7s 1 forwards;
+          animation: rugidoKoromon 0.8s 1 forwards;
         }
 
-        /* Quando passa o mouse, a animação entra em loop de vai-e-vem (alternate) */
-        .group:hover .agumon-starter {
-          animation: rugidoAgumon 0.6s infinite alternate;
+        .group:hover .koromon-starter {
+          animation: rugidoKoromon 0.6s infinite alternate;
         }
       `}} />
 
@@ -61,7 +56,6 @@ export function InitiationPage() {
 
       <div className="relative z-10 w-full max-w-4xl p-8 flex flex-col items-center min-h-[500px]">
         
-        {/* PASSO 1: BOAS VINDAS */}
         {step === 1 && (
           <div className="text-center animate-in fade-in zoom-in duration-1000 flex flex-col items-center">
             <h1 className="text-4xl md:text-5xl font-black text-digi-cyan tracking-widest uppercase mb-6 drop-shadow-[0_0_15px_rgba(0,229,255,0.5)]">
@@ -76,7 +70,6 @@ export function InitiationPage() {
           </div>
         )}
 
-        {/* PASSO 2: ESCOLHER GÊNERO COM PORTRAIT ESTÁTICO */}
         {step === 2 && (
           <div className="w-full animate-in slide-in-from-right duration-500 flex flex-col items-center">
             <h2 className="text-2xl font-black text-digi-gold tracking-widest uppercase mb-2">Qual o seu gênero, Tamer?</h2>
@@ -87,7 +80,6 @@ export function InitiationPage() {
                 onClick={() => setSelectedGender('male')}
                 className={`bg-slate-900/50 border-2 rounded-xl p-6 flex flex-col items-center cursor-pointer transition-all ${selectedGender === 'male' ? 'border-digi-gold shadow-[0_0_30px_rgba(255,215,0,0.3)] scale-105' : 'border-slate-800 hover:border-slate-600'}`}
               >
-                {/* Usando TamerPortrait agora para ficar estático */}
                 <div className="w-24 h-24 bg-slate-950 rounded-full flex items-center justify-center mb-4 border-2 border-slate-700 overflow-hidden shadow-inner">
                   <TamerPortrait gender="male" />
                 </div>
@@ -98,7 +90,6 @@ export function InitiationPage() {
                 onClick={() => setSelectedGender('female')}
                 className={`bg-slate-900/50 border-2 rounded-xl p-6 flex flex-col items-center cursor-pointer transition-all ${selectedGender === 'female' ? 'border-digi-gold shadow-[0_0_30px_rgba(255,215,0,0.3)] scale-105' : 'border-slate-800 hover:border-slate-600'}`}
               >
-                {/* Usando TamerPortrait agora para ficar estático */}
                 <div className="w-24 h-24 bg-slate-950 rounded-full flex items-center justify-center mb-4 border-2 border-slate-700 overflow-hidden shadow-inner">
                   <TamerPortrait gender="female" />
                 </div>
@@ -112,7 +103,6 @@ export function InitiationPage() {
           </div>
         )}
 
-        {/* PASSO 3: ESCOLHER DIGIMON INICIAL */}
         {step === 3 && (
           <div className="w-full animate-in slide-in-from-right duration-500 flex flex-col items-center">
             <h2 className="text-2xl font-black text-emerald-400 tracking-widest uppercase mb-2">Escolha seu Parceiro</h2>
@@ -127,7 +117,7 @@ export function InitiationPage() {
                 >
                   
                   {st.id === 'agumon' ? (
-                    <div className="agumon-starter mb-4 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)]"></div>
+                    <div className="koromon-starter mb-4 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)]"></div>
                   ) : (
                     <img src={st.img} alt={st.name} className="h-20 object-contain pixelated mb-4 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] transition-transform duration-300 group-hover:scale-110" />
                   )}

@@ -5,6 +5,29 @@ import { useGameStore } from '../store/useGameStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { TamerPortrait } from '../components/ui/TamerPortrait';
 
+const digimonDict: Record<string, { name: string, img: string, menuImg: string, isSprite?: boolean }> = {
+  'koromon': { name: 'Koromon', img: '/koromon-esq.png', menuImg: '/koromon-init.png', isSprite: true },
+  'agumon': { name: 'Agumon', img: '/agu-dg-esquerda.png', menuImg: '/agumon-init.png', isSprite: true },
+  'gabumon': { name: 'Gabumon', img: '/gabumon.gif', menuImg: '/gabumon.gif' },
+  'palmon': { name: 'Palmon', img: '/palmon.gif', menuImg: '/palmon.gif' },
+  'greymon': { name: 'Greymon', img: '/greymon.gif', menuImg: '/greymon.gif' },
+  'metalgreymon': { name: 'MetalGreymon', img: '/metalgreymon.gif', menuImg: '/metalgreymon.gif' },
+  'wargreymon': { name: 'WarGreymon', img: '/wargreymon.gif', menuImg: '/wargreymon.gif' },
+  'patamon': { name: 'Patamon', img: 'https://wikimon.net/images/0/07/Patamon_b_ds.gif', menuImg: 'https://wikimon.net/images/0/07/Patamon_b_ds.gif' }
+};
+
+const getDigimonVisuals = (baseId: string, level: number) => {
+  if (baseId === 'agumon') {
+    if (level < 30) return { name: 'Koromon', img: '/koromon-esq.png', menuImg: '/koromon-init.png', isSprite: true };
+    if (level < 100) return { name: 'Agumon', img: '/agu-dg-esquerda.png', menuImg: '/agumon-init.png', isSprite: true };
+    if (level < 300) return { name: 'Greymon', img: '/greymon.gif', menuImg: '/greymon.gif', isSprite: false };
+    if (level < 600) return { name: 'MetalGreymon', img: '/metalgreymon.gif', menuImg: '/metalgreymon.gif', isSprite: false };
+    return { name: 'WarGreymon', img: '/wargreymon.gif', menuImg: '/wargreymon.gif', isSprite: false };
+  }
+  const data = digimonDict[baseId];
+  return data ? { name: data.name, img: data.img, menuImg: data.menuImg, isSprite: data.isSprite } : { name: baseId, img: `/${baseId}.gif`, menuImg: `/${baseId}.gif`, isSprite: false };
+};
+
 export function DashboardPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
@@ -20,11 +43,17 @@ export function DashboardPage() {
   const [activeModal, setActiveModal] = useState<'inventory' | 'shop' | 'settings' | 'map' | 'pc' | 'quests' | 'profile' | 'digipedia' | null>(null);
   const [profileTab, setProfileTab] = useState<'main' | 'outfits' | 'logs'>('main');
 
+  const [currentZone, setCurrentZone] = useState<'floresta' | 'cidade'>('floresta');
+
   const [tamerPos, setTamerPos] = useState({ x: 50, y: 50 });
   const [directionImg, setDirectionImg] = useState('/andar-baixo.png');
   const [frameStep, setFrameStep] = useState(0);
   
   const isMovingRef = useRef(false);
+  const lastAttackTimeRef = useRef<number>(0);
+
+  const [damageNumbers, setDamageNumbers] = useState<{ id: number, instanceId: string, damage: number, x: number, y: number, isCrit: boolean }[]>([]);
+  const [lootPopups, setLootPopups] = useState<{ id: number, x: number, y: number, exp: number, bits: number }[]>([]);
 
   const closeModal = () => setActiveModal(null);
   const tamerGender = (avatar === 'sora' || avatar === 'mimi') ? 'female' : 'male';
@@ -46,10 +75,10 @@ export function DashboardPage() {
   }, [user, isDataLoaded, hasCompletedTutorial, saveProgress]);
 
   useEffect(() => {
-    if (isDataLoaded && hasCompletedTutorial && (!mapTargets || mapTargets.length === 0) && !scanningTarget) {
-      setMapHunt('koromon', 'Koromon', 5, '/koromon.gif', 'Normal');
+    if (isDataLoaded && hasCompletedTutorial && (!mapTargets || mapTargets.length === 0) && !scanningTarget && currentZone === 'floresta') {
+      setMapHunt('koromon', 'Koromon', 1, digimonDict['koromon'].img, 'Normal');
     }
-  }, [isDataLoaded, hasCompletedTutorial, mapTargets?.length, scanningTarget, setMapHunt]);
+  }, [isDataLoaded, hasCompletedTutorial, mapTargets?.length, scanningTarget, setMapHunt, currentZone]);
 
   const walkSequence = [0, 1, 2, 1];
 
@@ -66,9 +95,8 @@ export function DashboardPage() {
 
   const tamerFrame = walkSequence[frameStep];
 
-  // Motor de Roaming no Mapa
   useEffect(() => {
-    if (scanningTarget || !mapTargets || mapTargets.length === 0 || !isDataLoaded || !hasCompletedTutorial) {
+    if (currentZone === 'cidade' || scanningTarget || !mapTargets || mapTargets.length === 0 || !isDataLoaded || !hasCompletedTutorial) {
       isMovingRef.current = false;
       return;
     }
@@ -90,8 +118,43 @@ export function DashboardPage() {
 
         if (dist < 4) {
           isMovingRef.current = false; 
-          const balancedDamage = 4 + ((myDigimons[activeDigimon]?.level || 1) * 2);
-          attackMapTarget(target.instanceId, balancedDamage);
+          
+          const now = Date.now();
+          const ATTACK_SPEED_MS = 1000;
+
+          if (now - lastAttackTimeRef.current >= ATTACK_SPEED_MS) {
+            lastAttackTimeRef.current = now;
+
+            const myLevel = myDigimons[activeDigimon]?.level || 1;
+            
+            let baseDamage = myLevel * 12; 
+            const variance = baseDamage * 0.15;
+            let finalDamage = Math.floor(baseDamage + (Math.random() * variance * 2) - variance);
+            finalDamage = Math.max(1, finalDamage);
+
+            const isCrit = Math.random() < 0.15;
+            if (isCrit) finalDamage *= 2;
+
+            attackMapTarget(target.instanceId, finalDamage);
+
+            const newDamageId = Date.now();
+            setDamageNumbers(prevNums => [
+              ...prevNums, 
+              { 
+                id: newDamageId, 
+                instanceId: target.instanceId, 
+                damage: finalDamage,
+                isCrit,
+                x: target.x + (Math.random() * 4 - 2), 
+                y: target.y - 5 - (Math.random() * 2) 
+              }
+            ]);
+
+            setTimeout(() => {
+              setDamageNumbers(prevNums => prevNums.filter(num => num.id !== newDamageId));
+            }, 1000);
+          }
+
           return prev;
         }
 
@@ -108,25 +171,26 @@ export function DashboardPage() {
     }, 30);
 
     return () => clearInterval(roamInterval);
-  }, [mapTargets, scanningTarget, activeDigimon, myDigimons, attackMapTarget, isDataLoaded, hasCompletedTutorial]);
+  }, [mapTargets, scanningTarget, activeDigimon, myDigimons, attackMapTarget, isDataLoaded, hasCompletedTutorial, currentZone]);
 
-  // Cronômetro da Cinemática CSS de Scan de DNA
   useEffect(() => {
     if (scanningTarget) {
+      const newLootId = Date.now();
+      const exp = (scanningTarget.level || 1) * 20;
+      const bits = (scanningTarget.level || 1) * 25;
+      
+      setLootPopups(prev => [...prev, { id: newLootId, x: scanningTarget.x, y: scanningTarget.y, exp, bits }]);
+      
+      setTimeout(() => {
+        setLootPopups(prev => prev.filter(p => p.id !== newLootId));
+      }, 2000);
+
       const scanTimer = setTimeout(() => {
         finishDNAScan(scanningTarget);
       }, 2500); 
       return () => clearTimeout(scanTimer);
     }
   }, [scanningTarget, finishDNAScan]);
-
-  const digimonDict: Record<string, { name: string, img: string, isSprite?: boolean }> = {
-    'koromon': { name: 'Koromon', img: '/koromon.gif' }, 
-    'agumon': { name: 'Agumon', img: '/agu-dg-esquerda.png', isSprite: true },
-    'gabumon': { name: 'Gabumon', img: '/gabumon.gif' }, 
-    'palmon': { name: 'Palmon', img: '/palmon.gif' },
-    'greymon': { name: 'Greymon', img: '/greymon.gif' }
-  };
 
   const handleLogout = async () => {
     if (user && isDataLoaded) await saveProgress(user.uid); 
@@ -144,6 +208,8 @@ export function DashboardPage() {
   }
 
   const positions = ['0%', '50%', '100%'];
+  // Variável para saber se o personagem está atacando agora (baseado nos números de dano na tela)
+  const isAttacking = damageNumbers.length > 0;
 
   return (
     <div className="min-h-screen relative w-full h-screen overflow-hidden bg-[#4d9262] font-sans selection:bg-digi-cyan/30">
@@ -168,190 +234,339 @@ export function DashboardPage() {
           50%, 80% { transform: scale(1.05); filter: drop-shadow(0 0 20px cyan); opacity: 1; }
           100% { transform: scale(1); filter: drop-shadow(0 0 5px cyan); opacity: 0; }
         }
+        @keyframes floatDamage {
+          0% { transform: translateY(0) scale(0.5); opacity: 0; }
+          20% { transform: translateY(-15px) scale(1.2); opacity: 1; }
+          100% { transform: translateY(-40px) scale(1); opacity: 0; }
+        }
+        @keyframes floatCrit {
+          0% { transform: translateY(0) scale(0.5); opacity: 0; }
+          15% { transform: translateY(-10px) scale(1.8); opacity: 1; filter: brightness(1.5); }
+          100% { transform: translateY(-45px) scale(1.2); opacity: 0; }
+        }
+        @keyframes floatLoot {
+          0% { transform: translateY(0) scale(0.5); opacity: 0; }
+          20% { transform: translateY(-20px) scale(1.1); opacity: 1; }
+          80% { transform: translateY(-40px) scale(1); opacity: 1; }
+          100% { transform: translateY(-50px) scale(0.8); opacity: 0; }
+        }
         @keyframes spinPortal {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
+        .aura-elite { filter: drop-shadow(0 0 8px #3b82f6); }
+        .aura-chefe { filter: drop-shadow(0 0 12px #ef4444) brightness(1.2); }
+        .aura-divino { filter: drop-shadow(0 0 20px #fbbf24) brightness(1.4); }
+
+        /* NOVIDADES DE COMBATE VISUAL */
+        /* 1. Efeito de piscar vermelho quando o monstro toma hit */
+        @keyframes flashHit {
+          0%, 100% { filter: brightness(1) sepia(0); }
+          50% { filter: brightness(1.5) sepia(1) hue-rotate(-50deg) saturate(5); }
+        }
+        .is-being-hit {
+          animation: flashHit 0.3s ease-out;
+        }
+
+        /* 2. Efeito de explosão (Faísca) no inimigo */
+        @keyframes hitSpark {
+          0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0; }
+          30% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+          100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+        }
+
+        /* 3. Efeito do Tamer/Digimon "Avançando" para atacar */
+        @keyframes attackThrust {
+          0%, 100% { transform: translate(-50%, -50%); }
+          50% { transform: translate(calc(-50% + 4px), -50%); } /* Um pequeno pulinho pra frente */
+        }
+        .attacking-bump {
+          animation: attackThrust 0.3s ease-in-out infinite alternate;
+        }
       `}} />
 
-      {/* ==================================================== */}
-      {/* 1. MUNDO DO JOGO (CÂMERA, MAPA E PORTAL)             */}
-      {/* ==================================================== */}
       <div className="absolute inset-0 z-10 overflow-hidden pointer-events-none">
-        
-        <div 
-          className="absolute top-0 left-0 bg-[url('/map-bg.png')] bg-cover bg-center bg-no-repeat transition-transform duration-100 ease-linear [image-rendering:pixelated]"
-          style={{
-            width: '150vw',
-            height: '150vh',
-            transform: `translate(
-              clamp(-50vw, calc(50vw - ${tamerPos.x * 1.5}vw), 0vw), 
-              clamp(-50vh, calc(50vh - ${tamerPos.y * 1.5}vh), 0vh)
-            )`
-          }}
-        >
-
-          {/* O PORTAL MÁGICO 3D ANIMADO */}
-          <div
-            className="absolute z-10 flex items-center justify-center pointer-events-none"
-            style={{ top: '60%', left: '50%', transform: 'translate(-50%, -50%)' }}
-          >
-            <div className="absolute w-40 h-40 border-4 border-dashed border-cyan-400 rounded-full opacity-60 shadow-[0_0_20px_cyan]" style={{ animation: 'spinPortal 15s linear infinite', transform: 'rotateX(60deg)' }}></div>
-            <div className="absolute w-28 h-28 border-[6px] border-solid border-emerald-400 rounded-full opacity-80 shadow-[inset_0_0_15px_#10b981]" style={{ animation: 'spinPortal 8s linear infinite reverse', transform: 'rotateX(60deg)' }}></div>
-            <div className="absolute w-16 h-16 bg-cyan-300/40 rounded-full blur-xl" style={{ transform: 'rotateX(60deg)' }}></div>
-          </div>
-          
-          {/* O SEU TAMER E SEU DIGIMON ATIVO */}
+        {currentZone === 'floresta' ? (
           <div 
-            className="absolute flex items-center gap-3 z-30 transition-all duration-100 ease-linear"
-            style={{ top: `${tamerPos.y}%`, left: `${tamerPos.x}%`, transform: 'translate(-50%, -50%)' }}
+            className="absolute top-0 left-0 bg-[url('/map-bg.png')] bg-cover bg-center bg-no-repeat transition-transform duration-100 ease-linear [image-rendering:pixelated]"
+            style={{
+              width: '150vw',
+              height: '150vh',
+              transform: `translate(
+                clamp(-50vw, calc(50vw - ${tamerPos.x * 1.5}vw), 0vw), 
+                clamp(-50vh, calc(50vh - ${tamerPos.y * 1.5}vh), 0vh)
+              )`
+            }}
           >
-            {/* Tamer */}
-            <div className="relative flex flex-col items-center justify-center">
-              <div 
-                className="pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]" 
-                style={{ 
-                  width: '56px', 
-                  height: '56px', 
-                  backgroundImage: `url('${directionImg}')`,
-                  backgroundSize: '300% 100%',
-                  backgroundPosition: `${positions[tamerFrame]} 0%`,
-                  imageRendering: 'pixelated'
-                }} 
-              />
-              <div className="absolute bottom-2 w-8 h-2.5 bg-black/40 rounded-[100%] blur-[1px] -z-10"></div>
+            {/* O SEU TAMER E SEU DIGIMON ATIVO (COM ANIMAÇÃO DE ATAQUE) */}
+            <div 
+              className={`absolute flex items-center gap-3 z-30 transition-all duration-100 ease-linear ${isAttacking ? 'attacking-bump' : ''}`}
+              style={{ top: `${tamerPos.y}%`, left: `${tamerPos.x}%`, transform: 'translate(-50%, -50%)' }}
+            >
+              <div className="relative flex flex-col items-center justify-center">
+                <div 
+                  className="pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]" 
+                  style={{ 
+                    width: '56px', 
+                    height: '56px', 
+                    backgroundImage: `url('${directionImg}')`,
+                    backgroundSize: '300% 100%',
+                    backgroundPosition: `${positions[tamerFrame]} 0%`,
+                    imageRendering: 'pixelated'
+                  }} 
+                />
+                <div className="absolute bottom-2 w-8 h-2.5 bg-black/40 rounded-[100%] blur-[1px] -z-10"></div>
+              </div>
+
+              {activeDigimon && (() => {
+                const activeStats = myDigimons[activeDigimon];
+                const visual = activeStats ? getDigimonVisuals(activeDigimon, activeStats.level) : null;
+                
+                if (!visual) return null;
+
+                return (
+                  <div className="relative flex flex-col items-center justify-center">
+                    {visual.isSprite ? (
+                      <div 
+                        className={`pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] transition-transform duration-200 ${directionImg.includes('esq') ? '' : 'scale-x-[-1]'}`} 
+                        style={{ 
+                          width: '48px', 
+                          height: '48px', 
+                          backgroundImage: `url('${visual.img}')`,
+                          backgroundSize: '300% 100%',
+                          backgroundPosition: `${positions[tamerFrame]} 0%`,
+                          imageRendering: 'pixelated'
+                        }} 
+                      />
+                    ) : (
+                      <img 
+                        src={visual.img} 
+                        alt="Seu Digimon" 
+                        className={`w-14 h-14 object-contain pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] transition-transform duration-200 ${directionImg.includes('esq') ? '' : 'scale-x-[-1]'} ${isMovingRef.current ? 'animate-bounce' : ''}`}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    )}
+                    <div className="absolute bottom-1 w-8 h-2.5 bg-black/40 rounded-[100%] blur-[1px] -z-10"></div>
+                  </div>
+                );
+              })()}
             </div>
 
-            {/* Digimon */}
-            {activeDigimon && (
-              <div className="relative flex flex-col items-center justify-center">
-                {digimonDict[activeDigimon]?.isSprite ? (
-                  <div 
-                    className={`pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] transition-transform duration-200 ${directionImg.includes('esq') ? '' : 'scale-x-[-1]'}`} 
-                    style={{ 
-                      width: '48px', 
-                      height: '48px', 
-                      backgroundImage: `url('${digimonDict[activeDigimon].img}')`,
-                      backgroundSize: '300% 100%',
-                      backgroundPosition: `${positions[tamerFrame]} 0%`,
-                      imageRendering: 'pixelated'
-                    }} 
-                  />
-                ) : (
-                  <img 
-                    src={digimonDict[activeDigimon]?.img} 
-                    alt="Seu Digimon" 
-                    className={`w-14 h-14 object-contain pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] transition-transform duration-200 ${directionImg.includes('esq') ? '' : 'scale-x-[-1]'} ${isMovingRef.current ? 'animate-bounce' : ''}`}
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
-                )}
-                <div className="absolute bottom-1 w-8 h-2.5 bg-black/40 rounded-[100%] blur-[1px] -z-10"></div>
-              </div>
-            )}
-          </div>
+            {/* MONSTROS ERRANTES COM EFEITOS DE HIT */}
+            {mapTargets && mapTargets.map((target) => {
+              const rarity = (target as any).rarity || 'Normal';
+              const isBoss = rarity === 'Chefe' || rarity === 'Divino';
+              const auraClass = rarity === 'Divino' ? 'aura-divino' : rarity === 'Chefe' ? 'aura-chefe' : rarity === 'Elite' ? 'aura-elite' : '';
+              
+              const enemyVisual = getDigimonVisuals(target.id, target.level);
+              
+              // Verifica se este monstro específico está tomando dano agora
+              const isTakingDamage = damageNumbers.some(d => d.instanceId === target.instanceId);
 
-          {/* MONSTROS ERRANTES */}
-          {mapTargets && mapTargets.map((target) => {
-            const isBoss = target.rarity === 'Chefe';
+              return (
+                <div 
+                  key={target.instanceId}
+                  className="absolute flex flex-col items-center group transition-all duration-100 ease-linear z-20 pointer-events-auto cursor-pointer"
+                  style={{ top: `${target.y}%`, left: `${target.x}%`, transform: 'translate(-50%, -50%)' }}
+                >
+                  <div className="relative flex flex-col items-center justify-center">
+                    
+                    {/* A Faísca de Impacto em cima do Monstro */}
+                    {isTakingDamage && (
+                      <div 
+                        className="absolute top-1/2 left-1/2 z-50 text-4xl pointer-events-none drop-shadow-[0_0_5px_white]"
+                        style={{ animation: 'hitSpark 0.4s ease-out forwards' }}
+                      >
+                        💥
+                      </div>
+                    )}
 
-            return (
-              <div 
-                key={target.instanceId}
-                className="absolute flex flex-col items-center group transition-all duration-100 ease-linear z-20 pointer-events-auto cursor-pointer"
-                style={{ top: `${target.y}%`, left: `${target.x}%`, transform: 'translate(-50%, -50%)' }}
-              >
-                <div className="relative flex flex-col items-center justify-center">
-                  <img 
-                    src={target.image} 
-                    alt={target.name} 
-                    className={`relative object-contain drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] pixelated animate-bounce z-10 ${isBoss ? 'w-36 h-36' : 'w-20 h-20'}`}
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
-                  <div className={`absolute bottom-0 ${isBoss ? 'w-24 h-6' : 'w-12 h-3.5'} bg-black/40 rounded-[100%] blur-[1.5px] -z-10`}></div>
+                    {/* Renderização do Inimigo com a classe de piscar (is-being-hit) */}
+                    {enemyVisual.isSprite ? (
+                      <div 
+                        className={`pixelated relative z-10 animate-bounce ${auraClass} ${isBoss ? 'scale-150 mb-4' : 'scale-100'} ${isTakingDamage ? 'is-being-hit' : ''}`} 
+                        style={{ 
+                          width: '48px', 
+                          height: '48px', 
+                          backgroundImage: `url('${enemyVisual.img}')`,
+                          backgroundSize: '300% 100%',
+                          backgroundPosition: `${positions[tamerFrame]} 0%`, 
+                          imageRendering: 'pixelated'
+                        }} 
+                      />
+                    ) : (
+                      <img 
+                        src={enemyVisual.img} 
+                        alt={target.name} 
+                        className={`relative object-contain drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] pixelated animate-bounce z-10 ${auraClass} ${isBoss ? 'w-36 h-36' : 'w-20 h-20'} ${isTakingDamage ? 'is-being-hit' : ''}`}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    )}
+
+                    <div className={`absolute bottom-0 ${isBoss ? 'w-24 h-6' : 'w-12 h-3.5'} bg-black/40 rounded-[100%] blur-[1.5px] -z-10`}></div>
+                  </div>
+
+                  {isBoss ? (
+                    <div className={`bg-red-950/90 px-3 py-1 rounded border-2 ${rarity === 'Divino' ? 'border-yellow-400 shadow-[0_0_15px_yellow]' : 'border-red-500 shadow-[0_0_15px_red]'} text-center mt-2 w-36`}>
+                      <span className={`${rarity === 'Divino' ? 'text-white' : 'text-yellow-400'} text-xs font-black truncate block uppercase drop-shadow-md`}>{rarity === 'Divino' ? '✨' : '⚠️'} {target.name}</span>
+                      <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden mt-1 border border-red-900">
+                        <div className={`h-full transition-all ${rarity === 'Divino' ? 'bg-gradient-to-r from-yellow-300 to-white' : 'bg-gradient-to-r from-red-600 to-yellow-400'}`} style={{ width: `${Math.max(0, (target.hp / target.maxHp) * 100)}%` }}></div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-black/90 px-2 py-0.5 rounded border border-slate-700 text-center mt-1 w-24 shadow-lg">
+                      <span className={`text-[10px] font-bold truncate block ${rarity === 'Elite' ? 'text-blue-300' : 'text-slate-200'}`}>{target.name}</span>
+                      <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden mt-0.5">
+                        <div className="h-full bg-red-500 transition-all" style={{ width: `${Math.max(0, (target.hp / target.maxHp) * 100)}%` }}></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
+              );
+            })}
 
-                {isBoss ? (
-                  <div className="bg-red-950/90 px-3 py-1 rounded border-2 border-red-500 text-center mt-2 w-36 shadow-[0_0_15px_red]">
-                    <span className="text-yellow-400 text-xs font-black truncate block uppercase drop-shadow-md">⚠️ {target.name}</span>
-                    <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden mt-1 border border-red-900">
-                      <div className="h-full bg-gradient-to-r from-red-600 to-yellow-400 transition-all" style={{ width: `${Math.max(0, (target.hp / target.maxHp) * 100)}%` }}></div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-black/90 px-2 py-0.5 rounded border border-slate-700 text-center mt-1 w-24 shadow-lg">
-                    <span className="text-slate-200 text-[10px] font-bold truncate block">{target.name}</span>
-                    <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden mt-0.5">
-                      <div className="h-full bg-red-500 transition-all" style={{ width: `${Math.max(0, (target.hp / target.maxHp) * 100)}%` }}></div>
-                    </div>
-                  </div>
-                )}
+            {/* NÚMEROS DE DANO COM SUPORTE A CRÍTICO */}
+            {damageNumbers.map((damageItem) => (
+               <div 
+                 key={damageItem.id}
+                 className={`absolute z-50 pointer-events-none font-black drop-shadow-[0_2px_2px_rgba(0,0,0,1)] ${damageItem.isCrit ? 'text-yellow-400 text-2xl' : 'text-red-500 text-lg'}`}
+                 style={{
+                   left: `${damageItem.x}%`,
+                   top: `${damageItem.y}%`,
+                   transform: 'translate(-50%, -50%)',
+                   animation: `${damageItem.isCrit ? 'floatCrit' : 'floatDamage'} 1s ease-out forwards`,
+                 }}
+               >
+                 {damageItem.isCrit && <span className="block text-[8px] text-white -mb-1 ml-2">CRIT!</span>}
+                 -{damageItem.damage}
+               </div>
+            ))}
+
+            {/* LOOTS FLUTUANTES NO MAPA */}
+            {lootPopups.map(loot => (
+              <div key={loot.id} className="absolute z-50 pointer-events-none flex flex-col items-center gap-0.5" style={{ left: `${loot.x}%`, top: `${loot.y}%`, transform: 'translate(-50%, -50%)', animation: 'floatLoot 2s ease-out forwards' }}>
+                <span className="text-blue-400 font-black text-sm drop-shadow-[0_2px_2px_rgba(0,0,0,1)]">+{loot.exp} XP</span>
+                <span className="text-yellow-500 font-black text-sm drop-shadow-[0_2px_2px_rgba(0,0,0,1)]">+{loot.bits} Bits</span>
               </div>
-            );
-          })}
+            ))}
 
-          {/* A ANIMAÇÃO DO DIGIVICE NO LOCAL DA DERROTA */}
-          {scanningTarget && (
-            <div
-              className="absolute flex flex-col items-center justify-end z-20 pointer-events-none"
-              style={{
-                top: `${scanningTarget.y}%`,
-                left: `${scanningTarget.x}%`,
-                transform: 'translate(-50%, -75%)', // Ajuste para ficar melhor apoiado no chão
-                width: '80px', // Container encolhido
-                height: '150px' // Container encolhido
-              }}
-            >
-              {/* O Digimon derrotado (agora encolhido também) */}
-              <img
-                src={scanningTarget.image}
-                alt={`${scanningTarget.name} derrotado`}
-                className={`absolute top-0 object-contain pixelated z-30 ${scanningTarget.rarity === 'Chefe' ? 'w-24 h-24' : 'w-16 h-16'}`}
-                style={{ animation: 'suckIntoDigivice 2.5s ease-in-out forwards' }}
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-
-              {/* Espiral de DNA (encurtada) */}
-              <div
-                className="absolute top-[35px] w-[14px] h-[90px] z-20"
-                style={{
-                  background: 'linear-gradient(to bottom, transparent, rgba(0, 255, 255, 0.8), transparent)',
-                  borderRadius: '50%',
-                  filter: 'blur(1px)',
-                  animation: 'pulseDNA 0.5s infinite alternate, fadeOut 2.5s ease-in forwards'
-                }}
-              />
-
-              {/* Digivice 100% CSS puro - Escalonado para 55% para ficar compatível com o Tamer */}
-              <div className="absolute bottom-0 z-40 flex items-center justify-center drop-shadow-[0_6px_6px_rgba(0,0,0,0.8)] transform scale-[0.55] origin-bottom">
+            {/* A ANIMAÇÃO DO DIGIVICE NO LOCAL DA DERROTA */}
+            {scanningTarget && (() => {
+              const targetVisual = getDigimonVisuals(scanningTarget.id, scanningTarget.level);
+              return (
                 <div
+                  className="absolute flex flex-col items-center justify-end z-20 pointer-events-none"
                   style={{
-                    width: '64px',
-                    height: '56px',
-                    animation: 'glowDigivice 2.5s ease-in-out forwards'
+                    top: `${scanningTarget.y}%`,
+                    left: `${scanningTarget.x}%`,
+                    transform: 'translate(-50%, -75%)',
+                    width: '80px', 
+                    height: '150px' 
                   }}
                 >
-                  <div className="relative w-full h-full bg-cyan-100 border-[3px] border-slate-700 rounded-[20px] flex items-center justify-center shadow-[inset_0_-5px_0_rgba(0,180,216,0.4)]">
-                    <div className="absolute -top-[10px] left-[10px] w-[8px] h-[12px] bg-slate-700 rounded-t-md"></div>
-                    <div className="absolute w-[44px] h-[44px] rounded-full border-[2px] border-slate-400/50 flex items-center justify-center">
-                      <div className="w-[26px] h-[26px] bg-emerald-700 border-[2px] border-slate-700 rounded-[4px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"></div>
-                    </div>
-                    <div className="absolute right-[4px] top-[12px] w-[6px] h-[6px] bg-blue-600 border border-slate-700 rounded-full"></div>
-                    <div className="absolute right-[4px] bottom-[12px] w-[6px] h-[6px] bg-blue-600 border border-slate-700 rounded-full"></div>
-                    <div className="absolute left-[4px] top-[24px] w-[6px] h-[6px] bg-blue-600 border border-slate-700 rounded-full shadow-sm"></div>
-                  </div>
-                </div>
-              </div>
+                  {targetVisual.isSprite ? (
+                    <div 
+                      className={`absolute top-0 pixelated z-30 ${scanningTarget.rarity === 'Chefe' || scanningTarget.rarity === 'Divino' ? 'scale-[2.0]' : 'scale-110'}`} 
+                      style={{ 
+                        width: '48px', 
+                        height: '48px', 
+                        backgroundImage: `url('${targetVisual.img}')`,
+                        backgroundSize: '300% 100%',
+                        backgroundPosition: `0% 0%`,
+                        imageRendering: 'pixelated',
+                        animation: 'suckIntoDigivice 2.5s ease-in-out forwards'
+                      }} 
+                    />
+                  ) : (
+                    <img
+                      src={targetVisual.img}
+                      alt={`${scanningTarget.name} derrotado`}
+                      className={`absolute top-0 object-contain pixelated z-30 ${scanningTarget.rarity === 'Chefe' || scanningTarget.rarity === 'Divino' ? 'w-24 h-24' : 'w-16 h-16'}`}
+                      style={{ animation: 'suckIntoDigivice 2.5s ease-in-out forwards' }}
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  )}
 
-            </div>
-          )}
-        </div>
+                  <div
+                    className="absolute top-[35px] w-[14px] h-[90px] z-20"
+                    style={{
+                      background: 'linear-gradient(to bottom, transparent, rgba(0, 255, 255, 0.8), transparent)',
+                      borderRadius: '50%',
+                      filter: 'blur(1px)',
+                      animation: 'pulseDNA 0.5s infinite alternate, fadeOut 2.5s ease-in forwards'
+                    }}
+                  />
+
+                  <div className="absolute bottom-0 z-40 flex items-center justify-center drop-shadow-[0_6px_6px_rgba(0,0,0,0.8)] transform scale-[0.55] origin-bottom">
+                    <div
+                      style={{
+                        width: '64px',
+                        height: '56px',
+                        animation: 'glowDigivice 2.5s ease-in-out forwards'
+                      }}
+                    >
+                      <div className="relative w-full h-full bg-cyan-100 border-[3px] border-slate-700 rounded-[20px] flex items-center justify-center shadow-[inset_0_-5px_0_rgba(0,180,216,0.4)]">
+                        <div className="absolute -top-[10px] left-[10px] w-[8px] h-[12px] bg-slate-700 rounded-t-md"></div>
+                        <div className="absolute w-[44px] h-[44px] rounded-full border-[2px] border-slate-400/50 flex items-center justify-center">
+                          <div className="w-[26px] h-[26px] bg-emerald-700 border-[2px] border-slate-700 rounded-[4px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"></div>
+                        </div>
+                        <div className="absolute right-[4px] top-[12px] w-[6px] h-[6px] bg-blue-600 border border-slate-700 rounded-full"></div>
+                        <div className="absolute right-[4px] bottom-[12px] w-[6px] h-[6px] bg-blue-600 border border-slate-700 rounded-full"></div>
+                        <div className="absolute left-[4px] top-[24px] w-[6px] h-[6px] bg-blue-600 border border-slate-700 rounded-full shadow-sm"></div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              );
+            })()}
+          </div>
+        ) : (
+          /* MODO CIDADE */
+          <div className="absolute top-0 left-0 w-full h-full bg-[url('/cidade-bg.png')] bg-cover bg-center bg-no-repeat pointer-events-auto flex items-center justify-center">
+             <div className="relative w-[800px] h-[600px] bg-black/40 border-4 border-slate-700/50 rounded-xl backdrop-blur-sm p-8 flex flex-col items-center shadow-2xl">
+               <h1 className="text-3xl font-black text-digi-cyan uppercase tracking-widest mb-10 drop-shadow-[0_0_10px_rgba(0,229,255,0.5)]">Cidade do Começo</h1>
+               <div className="flex gap-16">
+                 <div onClick={() => setActiveModal('shop')} className="group flex flex-col items-center cursor-pointer hover:scale-110 transition-transform">
+                   <div className="w-24 h-24 bg-red-900/80 border-2 border-red-500 rounded-full flex items-center justify-center mb-3 shadow-[0_0_15px_red] group-hover:bg-red-800"><span className="text-4xl">🛒</span></div>
+                   <span className="text-white font-bold bg-slate-900 px-3 py-1 rounded border border-slate-700 uppercase tracking-widest text-xs">Mercado Local</span>
+                 </div>
+                 <div onClick={() => setActiveModal('pc')} className="group flex flex-col items-center cursor-pointer hover:scale-110 transition-transform">
+                   <div className="w-24 h-24 bg-blue-900/80 border-2 border-blue-500 rounded-full flex items-center justify-center mb-3 shadow-[0_0_15px_blue] group-hover:bg-blue-800"><span className="text-4xl">💻</span></div>
+                   <span className="text-white font-bold bg-slate-900 px-3 py-1 rounded border border-slate-700 uppercase tracking-widest text-xs">Digi-Bank</span>
+                 </div>
+                 <div onClick={() => alert('Mercado Livre de Jogadores em breve!')} className="group flex flex-col items-center cursor-pointer hover:scale-110 transition-transform">
+                   <div className="w-24 h-24 bg-emerald-900/80 border-2 border-emerald-500 rounded-full flex items-center justify-center mb-3 shadow-[0_0_15px_#10b981] group-hover:bg-emerald-800 relative">
+                     <span className="absolute -top-2 -right-2 bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded shadow-md animate-pulse">NOVO</span><span className="text-4xl">🤝</span>
+                   </div>
+                   <span className="text-white font-bold bg-slate-900 px-3 py-1 rounded border border-slate-700 uppercase tracking-widest text-xs">Mercado Online</span>
+                 </div>
+               </div>
+               <div className="absolute bottom-10 flex flex-col items-center pointer-events-none">
+                 <div className="flex gap-4 items-end">
+                   <div className="pixelated drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]" style={{ width: '64px', height: '64px', backgroundImage: `url('/andar-baixo.png')`, backgroundSize: '300% 100%', backgroundPosition: `0% 0%`, imageRendering: 'pixelated' }} />
+                   {activeDigimon && (() => {
+                     const visual = getDigimonVisuals(activeDigimon, myDigimons[activeDigimon]?.level || 1);
+                     return <img src={visual.menuImg} className="w-16 h-16 object-contain pixelated drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]" />;
+                   })()}
+                 </div>
+               </div>
+             </div>
+          </div>
+        )}
       </div>
 
       {/* ==================================================== */}
-      {/* 2. UI DO JOGADOR (FICA PARADA POR CIMA DO MUNDO)     */}
+      {/* 2. UI DO JOGADOR                                     */}
       {/* ==================================================== */}
 
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 bg-slate-950/90 border border-slate-700/50 rounded-md p-1.5 flex gap-2 shadow-lg backdrop-blur-sm pointer-events-auto">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-auto">
+        <button onClick={() => setCurrentZone(prev => prev === 'floresta' ? 'cidade' : 'floresta')} className="bg-slate-950/90 border-2 border-digi-cyan text-digi-cyan px-6 py-2 rounded-full font-black uppercase tracking-widest hover:bg-digi-cyan hover:text-slate-900 transition-all shadow-[0_0_15px_rgba(0,229,255,0.4)]">
+          Viajar para: {currentZone === 'floresta' ? '🏰 Cidade Inicial' : '🌲 Floresta (Hunt)'}
+        </button>
+      </div>
+
+      <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-slate-950/90 border border-slate-700/50 rounded-md p-1.5 flex gap-2 shadow-lg backdrop-blur-sm pointer-events-auto">
         <button onClick={() => setActiveModal('profile')} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 transition-colors text-sm">👤</button>
         <button onClick={() => setActiveModal('inventory')} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 transition-colors text-sm">🎒</button>
         <button onClick={() => setActiveModal('pc')} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 transition-colors text-sm">💻</button>
@@ -375,17 +590,18 @@ export function DashboardPage() {
              const stats = myDigimons[id];
              const isActive = activeDigimon === id;
              const expProgress = (stats?.exp / stats?.maxExp) * 100 || 0;
+             const visual = getDigimonVisuals(id, stats?.level || 1);
              return (
                <div key={id} onClick={() => setActiveDigimon(id)} className={`bg-slate-900 border ${isActive ? 'border-digi-gold shadow-[0_0_10px_rgba(255,215,0,0.2)]' : 'border-slate-800'} rounded p-1.5 flex items-center gap-2 cursor-pointer hover:border-digi-cyan/50 transition-all`}>
                  <img 
-                   src={digimonDict[id]?.img} 
+                   src={visual.menuImg} 
                    className="w-10 h-10 object-contain bg-slate-950 rounded border border-slate-700 p-1 pixelated" 
-                   alt={digimonDict[id]?.name}
+                   alt={visual.name}
                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
                  />
                  <div className="flex-1">
                    <div className="flex justify-between text-xs font-bold text-slate-200 mb-1">
-                     <span className="flex items-center gap-1">{isActive && <span className="text-[10px]">👑</span>} {digimonDict[id]?.name}</span>
+                     <span className="flex items-center gap-1">{isActive && <span className="text-[10px]">👑</span>} {visual.name}</span>
                      <span className="text-digi-cyan">Lv.{stats?.level || 1}</span>
                    </div>
                    <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
@@ -398,16 +614,18 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <div className="absolute top-4 right-4 z-50 flex flex-col gap-3 w-48 pointer-events-auto">
-        <div className="bg-slate-950/95 border border-slate-700 rounded-md shadow-2xl overflow-hidden">
-          <div className="bg-slate-900 border-b border-slate-700 p-1 text-center">
-            <span className="text-[10px] font-bold text-digi-cyan uppercase tracking-widest">Mundo Aberto</span>
-          </div>
-          <div className="h-32 bg-slate-800 relative bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] cursor-pointer" onClick={() => setActiveModal('map')}>
-             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-digi-cyan rounded-full border border-white shadow-[0_0_5px_cyan] animate-pulse"></div>
+      {currentZone === 'floresta' && (
+        <div className="absolute top-4 right-4 z-50 flex flex-col gap-3 w-48 pointer-events-auto">
+          <div className="bg-slate-950/95 border border-slate-700 rounded-md shadow-2xl overflow-hidden">
+            <div className="bg-slate-900 border-b border-slate-700 p-1 text-center">
+              <span className="text-[10px] font-bold text-digi-cyan uppercase tracking-widest">Mundo Aberto</span>
+            </div>
+            <div className="h-32 bg-slate-800 relative bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] cursor-pointer" onClick={() => setActiveModal('map')}>
+               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-digi-cyan rounded-full border border-white shadow-[0_0_5px_cyan] animate-pulse"></div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex gap-1 bg-slate-950/80 p-1.5 rounded-md border border-slate-700/50 backdrop-blur-sm shadow-2xl pointer-events-auto">
         {[ 
@@ -546,10 +764,10 @@ export function DashboardPage() {
                       {Object.entries(fragments).map(([id, amount]) => {
                         const progress = Math.min((amount / 50) * 100, 100);
                         const isReady = amount >= 50 && !ownedDigimons.includes(id);
-                        const data = digimonDict[id] || { name: 'Desconhecido', img: '' };
+                        const data = digimonDict[id] || { name: 'Desconhecido', menuImg: '' };
                         return (
                           <div key={id} className="bg-slate-900 border border-slate-800 p-3 rounded-lg flex items-center gap-4">
-                            <img src={data.img} className={`w-12 h-12 object-contain bg-slate-950 rounded border ${isReady ? 'border-digi-cyan' : 'border-slate-700 grayscale'} pixelated`} />
+                            <img src={data.menuImg} className={`w-12 h-12 object-contain bg-slate-950 rounded border ${isReady ? 'border-digi-cyan' : 'border-slate-700 grayscale'} pixelated`} />
                             <div className="flex-1">
                               <h4 className="text-slate-200 font-bold uppercase tracking-wider mb-2">{data.name}</h4>
                               <div className="w-full h-3 bg-slate-950 border border-slate-700 rounded-full overflow-hidden relative">
@@ -587,7 +805,7 @@ export function DashboardPage() {
                     const hasDigimon = ownedDigimons.includes(id);
                     return (
                       <div key={id} className={`bg-slate-900 border ${hasDigimon ? 'border-digi-cyan/50' : 'border-slate-800'} rounded p-2 flex flex-col items-center justify-center gap-2 aspect-square`}>
-                        <img src={data.img} alt={data.name} className={`w-12 h-12 object-contain p-1 ${hasDigimon ? '' : 'brightness-0 opacity-30'} pixelated`} />
+                        <img src={data.menuImg} alt={data.name} className={`w-12 h-12 object-contain p-1 ${hasDigimon ? '' : 'brightness-0 opacity-30'} pixelated`} />
                         <span className={`text-[10px] font-bold uppercase ${hasDigimon ? 'text-slate-200' : 'text-slate-600'}`}>{hasDigimon ? data.name : '???'}</span>
                       </div>
                     )
@@ -609,13 +827,13 @@ export function DashboardPage() {
               {activeModal === 'map' && (
                 <div className="h-full flex flex-col">
                   <div className="flex-1 bg-blue-950/30 border border-slate-700 rounded-lg relative overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
-                    <button onClick={() => { setMapHunt('koromon', 'Koromon', 5, '/koromon.gif', 'Normal'); closeModal(); }} className="absolute top-1/4 left-1/4 group transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                      <div className="w-12 h-12 bg-slate-900 border-2 border-digi-gold rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:border-digi-cyan transition-transform z-10 relative overflow-hidden"><img src="/koromon.gif" className="w-10 h-10 object-contain pixelated" /></div>
-                      <div className="bg-slate-950/90 border border-slate-700 px-2 py-0.5 rounded mt-1 text-center"><p className="text-[10px] font-bold text-white uppercase">Koromon</p></div>
+                    <button onClick={() => { setMapHunt('koromon', 'Koromon', 1, digimonDict['koromon'].img, 'Normal'); closeModal(); setCurrentZone('floresta'); }} className="absolute top-1/4 left-1/4 group transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+                      <div className="w-12 h-12 bg-slate-900 border-2 border-digi-gold rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:border-digi-cyan transition-transform z-10 relative overflow-hidden"><img src="/koromon-init.png" className="w-10 h-10 object-contain pixelated" /></div>
+                      <div className="bg-slate-950/90 border border-slate-700 px-2 py-0.5 rounded mt-1 text-center"><p className="text-[10px] font-bold text-white uppercase">Pradaria Koromon</p></div>
                     </button>
-                    <button onClick={() => { setMapHunt('agumon', 'Agumon', 20, '/agumon.gif', 'Normal'); closeModal(); }} className="absolute top-1/2 left-2/3 group transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                      <div className="w-12 h-12 bg-slate-900 border-2 border-slate-500 rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:border-digi-cyan transition-transform z-10 relative overflow-hidden"><img src="/agumon.gif" className="w-10 h-10 object-contain pixelated" /></div>
-                      <div className="bg-slate-950/90 border border-slate-700 px-2 py-0.5 rounded mt-1 text-center"><p className="text-[10px] font-bold text-white uppercase">Agumon</p></div>
+                    <button onClick={() => { setMapHunt('agumon', 'Agumon', 20, digimonDict['agumon'].img, 'Normal'); closeModal(); setCurrentZone('floresta'); }} className="absolute top-1/2 left-2/3 group transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+                      <div className="w-12 h-12 bg-slate-900 border-2 border-slate-500 rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:border-digi-cyan transition-transform z-10 relative overflow-hidden"><img src="/agumon-init.png" className="w-10 h-10 object-contain pixelated" /></div>
+                      <div className="bg-slate-950/90 border border-slate-700 px-2 py-0.5 rounded mt-1 text-center"><p className="text-[10px] font-bold text-white uppercase">Ninho Agumon</p></div>
                     </button>
                   </div>
                 </div>
