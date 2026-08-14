@@ -1,5 +1,5 @@
 // src/pages/DashboardPage.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/useGameStore'; 
 import { useAuthStore } from '../store/useAuthStore';
@@ -13,11 +13,37 @@ export function DashboardPage() {
   
   const { 
     tamerName, bits, gems, ownedDigimons, myDigimons, activeDigimon, items,
-    setActiveDigimon, useItem, saveProgress, loadProgress, isDataLoaded, hasCompletedTutorial
+    setActiveDigimon, useItem, saveProgress, loadProgress, isDataLoaded, hasCompletedTutorial, evolveDigimon,
+    huntSession
   } = useGameStore();
   
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [currentZone, setCurrentZone] = useState<'floresta' | 'cidade'>('floresta');
+
+  // CHAT FUNCIONAL
+  const [activeChatTab, setActiveChatTab] = useState<'mundo' | 'comercio' | 'duvidas'>('mundo');
+  const [chatInput, setChatInput] = useState('');
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const initialMessages = [
+    { time: '13:30', author: 'Dr_XDSF', level: 771, text: 'Golem lendario, 1.8, 131, 100KK listado' },
+    { time: '13:30', author: 'SebaSeeds', level: 805, text: 'Hola, como se llega a Outlands chicos ??' },
+    { time: '13:30', author: 'Chufli', level: 216, text: 'debes subir al nivel 150' },
+  ];
+  const [chatMessages, setChatMessages] = useState(initialMessages);
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+    const newMsg = {
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      author: user?.displayName || tamerName,
+      level: myDigimons[activeDigimon]?.level || 1,
+      text: chatInput
+    };
+    setChatMessages(prev => [...prev, newMsg]);
+    setChatInput('');
+  };
 
   useEffect(() => {
     if (user && !isDataLoaded) {
@@ -35,6 +61,10 @@ export function DashboardPage() {
     return () => clearInterval(saveInterval);
   }, [user, isDataLoaded, hasCompletedTutorial, saveProgress]);
 
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages, activeChatTab]);
+
   const handleLogout = async () => {
     if (user && isDataLoaded) await saveProgress(user.uid); 
     await logout();
@@ -43,85 +73,121 @@ export function DashboardPage() {
 
   if (!isDataLoaded) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
-        <div className="w-12 h-12 border-4 border-digi-cyan border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-digi-cyan font-bold tracking-widest uppercase animate-pulse">Sincronizando Dados...</p>
+      <div className="min-h-screen bg-[#0a0f1a] flex flex-col items-center justify-center">
+        <div className="w-10 h-10 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-cyan-400 font-bold tracking-widest uppercase text-[10px] animate-pulse">Carregando...</p>
       </div>
     );
   }
 
+  const huntTimeMinutes = Math.floor((Date.now() - huntSession.timeStart) / 60000);
+  const huntTimeHours = Math.floor(huntTimeMinutes / 60);
+
   return (
-    <div className="min-h-screen relative w-full h-screen overflow-hidden bg-[#4d9262] font-sans selection:bg-digi-cyan/30">
+    <div className="min-h-screen relative w-full h-screen overflow-hidden bg-[#000] font-sans selection:bg-cyan-500/30">
       
       <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes suckIntoDigivice { 0% { transform: translateY(0) scale(1); filter: brightness(1) drop-shadow(0 0 5px cyan); opacity: 0.9; } 40% { transform: translateY(40px) scale(0.6); filter: brightness(2) drop-shadow(0 0 15px cyan) hue-rotate(45deg); opacity: 0.7; } 100% { transform: translateY(100px) scale(0); filter: brightness(3); opacity: 0; } }
-        @keyframes pulseDNA { from { width: 8px; opacity: 0.6; } to { width: 14px; opacity: 1; } }
-        @keyframes fadeOut { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
-        @keyframes glowDigivice { 0% { transform: scale(0.5) translateY(10px); filter: drop-shadow(0 0 0px cyan); opacity: 0; } 20% { transform: scale(1) translateY(0); filter: drop-shadow(0 0 10px cyan); opacity: 1; } 50%, 80% { transform: scale(1.05); filter: drop-shadow(0 0 20px cyan); opacity: 1; } 100% { transform: scale(1); filter: drop-shadow(0 0 5px cyan); opacity: 0; } }
         @keyframes floatDamage { 0% { transform: translateY(0) scale(0.5); opacity: 0; } 20% { transform: translateY(-15px) scale(1.2); opacity: 1; } 100% { transform: translateY(-40px) scale(1); opacity: 0; } }
         @keyframes floatCrit { 0% { transform: translateY(0) scale(0.5); opacity: 0; } 15% { transform: translateY(-10px) scale(1.8); opacity: 1; filter: brightness(1.5); } 100% { transform: translateY(-45px) scale(1.2); opacity: 0; } }
         @keyframes floatLoot { 0% { transform: translateY(0) scale(0.5); opacity: 0; } 20% { transform: translateY(-20px) scale(1.1); opacity: 1; } 80% { transform: translateY(-40px) scale(1); opacity: 1; } 100% { transform: translateY(-50px) scale(0.8); opacity: 0; } }
-        @keyframes spinPortal { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes monsterHit { 0%, 100% { filter: brightness(1) sepia(0); transform: translateX(0); } 25% { filter: brightness(1.5) sepia(1) hue-rotate(-50deg) saturate(5); transform: translateX(-3px); } 75% { filter: brightness(1.5) sepia(1) hue-rotate(-50deg) saturate(5); transform: translateX(3px); } }
+        .hit-anim { animation: monsterHit 0.3s ease-out; }
+        @keyframes suckIntoDigivice { 0% { transform: scale(1) translateY(0) rotate(0deg); opacity: 1; filter: brightness(1) drop-shadow(0 0 0px cyan); } 25% { transform: scale(0.9) translateY(-30px) rotate(0deg); opacity: 1; filter: brightness(1.5) drop-shadow(0 0 10px cyan); } 60% { transform: scale(0.4) translateY(-30px) rotate(180deg); opacity: 0.8; filter: brightness(2) drop-shadow(0 0 20px cyan); } 100% { transform: scale(0) translateY(60px) rotate(360deg); opacity: 0; filter: brightness(3); } }
+        @keyframes pulseDNA { from { width: 8px; opacity: 0.6; } to { width: 14px; opacity: 1; } }
+        @keyframes fadeOut { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+        @keyframes digivicePulse { 0%, 100% { opacity: 0.5; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2) drop-shadow(0 0 10px cyan); } }
+        @keyframes attackThrust { 0%, 100% { transform: translate(-50%, -50%); } 50% { transform: translate(calc(-50% + 4px), -50%); } }
+        .attacking-bump { animation: attackThrust 0.3s ease-in-out infinite alternate; }
         .aura-elite { filter: drop-shadow(0 0 8px #3b82f6); }
         .aura-chefe { filter: drop-shadow(0 0 12px #ef4444) brightness(1.2); }
         .aura-divino { filter: drop-shadow(0 0 20px #fbbf24) brightness(1.4); }
-        @keyframes flashHit { 0%, 100% { filter: brightness(1) sepia(0); } 50% { filter: brightness(1.5) sepia(1) hue-rotate(-50deg) saturate(5); } }
-        .is-being-hit { animation: flashHit 0.3s ease-out; }
-        @keyframes hitSpark { 0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0; } 30% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; } }
-        @keyframes attackThrust { 0%, 100% { transform: translate(-50%, -50%); } 50% { transform: translate(calc(-50% + 4px), -50%); } }
-        .attacking-bump { animation: attackThrust 0.3s ease-in-out infinite alternate; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
       `}} />
 
       <GameWorld currentZone={currentZone} setActiveModal={setActiveModal} setCurrentZone={setCurrentZone} />
 
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 bg-slate-950/90 border border-slate-700/50 rounded-md p-1.5 flex gap-2 shadow-lg backdrop-blur-sm pointer-events-auto">
-        <button onClick={() => setCurrentZone(prev => prev === 'floresta' ? 'cidade' : 'floresta')} className="w-8 h-8 flex items-center justify-center rounded bg-digi-cyan/20 border border-digi-cyan hover:bg-digi-cyan hover:text-slate-900 transition-colors text-sm relative group">
-          {currentZone === 'floresta' ? '🏰' : '🌲'}
-          <span className="absolute -bottom-8 bg-black text-white text-[8px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none border border-slate-700">
-            {currentZone === 'floresta' ? 'Ir para a Cidade' : 'Voltar ao Mapa'}
-          </span>
+      {/* TOP MENU BAR COMPACTA */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 bg-[#0f121a]/95 border border-[#1e293b] rounded-full px-3 py-1.5 flex items-center gap-3 shadow-[0_4px_15px_rgba(0,0,0,0.8)] backdrop-blur-md">
+        
+        <button 
+          onClick={() => setCurrentZone(prev => prev === 'floresta' ? 'cidade' : 'floresta')} 
+          className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-1.5 hover:text-white transition-colors bg-[#141824] px-4 py-1.5 rounded-full border border-[#2d3748]"
+        >
+          <span className="text-[13px] leading-none drop-shadow-md">{currentZone === 'floresta' ? '🏰' : '🌲'}</span>
+          {currentZone === 'floresta' ? 'BASE' : 'CAÇAR'}
         </button>
-        <div className="w-px h-8 bg-slate-700 mx-1"></div> 
-        <button onClick={() => setActiveModal('profile')} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 transition-colors text-sm">👤</button>
-        <button onClick={() => setActiveModal('inventory')} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 transition-colors text-sm">🎒</button>
-        <button onClick={() => setActiveModal('pc')} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 transition-colors text-sm">💻</button>
-        <button onClick={() => setActiveModal('map')} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 transition-colors text-sm">🗺️</button>
-        <button onClick={() => setActiveModal('quests')} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 transition-colors text-sm relative">📜<span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse border border-slate-900"></span></button>
-        <button onClick={() => setActiveModal('digipedia')} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 transition-colors text-sm">📖</button>
-        <button onClick={() => setActiveModal('shop')} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 transition-colors text-sm">🛒</button>
-        <div className="w-px h-8 bg-slate-700 mx-1"></div> 
-        <button onClick={() => setActiveModal('settings')} className="w-8 h-8 flex items-center justify-center rounded bg-slate-800 border border-slate-600 hover:border-digi-cyan transition-colors text-sm">⚙️</button>
+
+        <div className="w-px h-5 bg-[#2d3748] mx-1"></div>
+
+        <div className="flex items-center gap-4 px-1">
+          <button onClick={() => setActiveModal('profile')} className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black]" title="Perfil">👤</button>
+          <button onClick={() => setActiveModal('inventory')} className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black]" title="Mochila">🎒</button>
+          <button onClick={() => setActiveModal('pc')} className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black]" title="Digi-Bank">💻</button>
+          <button onClick={() => setActiveModal('map')} className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black]" title="Mapa">🗺️</button>
+        </div>
+        
+        <div className="w-px h-5 bg-[#2d3748] mx-1"></div>
+
+        <div className="flex items-center gap-4 px-1">
+          <button onClick={() => setActiveModal('quests')} className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black]" title="Analyzer">📊</button>
+          {/* Mercado Oculto se não estiver na cidade */}
+          {currentZone === 'cidade' && (
+            <button onClick={() => setActiveModal('shop')} className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black]" title="Mercado">🛒</button>
+          )}
+          <button onClick={() => setActiveModal('gamepass')} className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black]" title="Game Pass">🏅</button>
+          <button onClick={() => setActiveModal('settings')} className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black]" title="Auto-Helper">⚙️</button>
+        </div>
       </div>
 
-      <div className="absolute top-4 left-4 w-64 z-50 bg-slate-950/95 border border-slate-700 rounded-md shadow-2xl overflow-hidden flex flex-col pointer-events-auto">
-        <div className="bg-slate-900 border-b border-slate-700 p-2 flex items-center justify-between">
-          <div>
-            <h2 className="font-bold text-digi-gold text-sm tracking-wider uppercase">{user?.displayName || tamerName}</h2>
-            <p className="text-[10px] text-slate-400 font-bold tracking-widest">🪙 {bits.toLocaleString()} | 💎 {gems.toLocaleString()}</p>
+      {/* LEFT PANEL TEAM (Estilo image_a990a3.png - Borda Dourada Exata e Imagens Estáticas Limpas) */}
+      <div className="absolute top-[60px] left-4 w-[240px] z-40 bg-[#0f121a] border border-[#1e293b] rounded-lg shadow-2xl flex flex-col pointer-events-auto">
+        
+        <div className="p-3 border-b border-[#1e293b] flex items-center gap-3">
+          <div className="w-[38px] h-[38px] bg-[#000] rounded-full border border-yellow-500 flex items-center justify-center overflow-hidden shadow-inner">
+             <span className="text-lg">🧑‍🚀</span>
+          </div>
+          <div className="flex flex-col justify-center">
+            <h2 className="font-bold text-[#facc15] text-[12px] tracking-wider uppercase leading-none drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">{user?.displayName || tamerName}</h2>
+            <p className="text-[9px] text-slate-400 mt-1">Nível 401 • {getDigimonVisuals(activeDigimon, myDigimons[activeDigimon]?.level || 1, true).name}</p>
           </div>
         </div>
-        <div className="p-2 space-y-2">
+
+        <div className="p-2.5 space-y-2.5">
           {ownedDigimons.map((id) => {
              const stats = myDigimons[id];
              const isActive = activeDigimon === id;
              const expProgress = (stats?.exp / stats?.maxExp) * 100 || 0;
              const hpProgress = (stats?.hp / stats?.maxHp) * 100 || 0;
              const visual = getDigimonVisuals(id, stats?.level || 1, true);
+
              return (
-               <div key={id} onClick={() => setActiveDigimon(id)} className={`bg-slate-900 border ${isActive ? 'border-digi-gold shadow-[0_0_10px_rgba(255,215,0,0.2)]' : 'border-slate-800'} rounded p-1.5 flex items-center gap-2 cursor-pointer hover:border-digi-cyan/50 transition-all`}>
-                 <MenuSprite visual={visual} className="w-10 h-10 bg-slate-950 rounded border border-slate-700 p-1" />
-                 <div className="flex-1">
-                   <div className="flex justify-between text-xs font-bold text-slate-200 mb-1">
-                     <span className="flex items-center gap-1">{isActive && <span className="text-[10px]">👑</span>} {visual.name}</span>
-                     <span className="text-digi-cyan">Lv.{stats?.level || 1}</span>
+               <div key={id} onClick={() => setActiveDigimon(id)} className={`bg-[#141824] rounded-lg p-2.5 flex gap-3 cursor-pointer transition-all border shadow-md ${isActive ? 'border-[#facc15]' : 'border-[#2d3748]'}`}>
+                 
+                 {/* AVATAR COM FOTO LIMPA E ESTATICA (menuImg) */}
+                 <div className={`w-[42px] h-[42px] bg-[#000] rounded-full border-2 flex items-center justify-center flex-shrink-0 relative overflow-hidden ${isActive ? 'border-[#facc15]' : 'border-[#2d3748]'}`}>
+                    <img src={visual.menuImg} alt={visual.name} className="w-[30px] h-[30px] object-contain relative z-10" />
+                 </div>
+
+                 <div className="flex-1 flex flex-col justify-center mt-[-1px]">
+                   
+                   <div className="flex justify-between items-center mb-1.5">
+                     <span className="text-[10px] font-bold text-white uppercase tracking-widest">{visual.name}</span>
+                     <span className="text-[#38bdf8] text-[10px] font-bold">Lv.{stats?.level || 1}</span>
                    </div>
                    
-                   <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800 mb-1 relative">
-                     <div className="h-full bg-red-500 transition-all duration-300" style={{ width: `${Math.max(0, hpProgress)}%` }}></div>
-                     <span className="absolute inset-0 flex items-center justify-center text-[7px] font-mono font-bold text-white leading-none tracking-widest drop-shadow-[0_1px_1px_black]">{stats?.hp}/{stats?.maxHp}</span>
+                   <div className="w-full h-[8px] bg-[#000] overflow-hidden mb-1.5 relative rounded-[2px]">
+                     <div className="h-full bg-[#4ade80]" style={{ width: `${Math.max(0, hpProgress)}%` }}></div>
+                     <span className="absolute inset-0 flex items-center justify-center text-[7px] font-bold text-white leading-none drop-shadow-[0_1px_1px_rgba(0,0,0,1)] pt-[1px]">{Math.floor(stats?.hp || 0)}/{stats?.maxHp}</span>
                    </div>
-                   <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
-                     <div className="h-full bg-purple-500 transition-all duration-300" style={{ width: `${expProgress}%` }}></div>
+
+                   <div className="flex items-center gap-2">
+                     <div className="flex-1 h-[3px] bg-[#000] overflow-hidden rounded-[2px]">
+                       <div className="h-full bg-[#facc15]" style={{ width: `${expProgress}%` }}></div>
+                     </div>
+                     <span className="text-[8px] font-bold text-slate-300 leading-none">{Math.floor(expProgress)}%</span>
                    </div>
 
                  </div>
@@ -131,34 +197,96 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {currentZone === 'floresta' && (
-        <div className="absolute top-4 right-4 z-50 flex flex-col gap-3 w-48 pointer-events-auto">
-          <div className="bg-slate-950/95 border border-slate-700 rounded-md shadow-2xl overflow-hidden">
-            <div className="bg-slate-900 border-b border-slate-700 p-1 text-center">
-              <span className="text-[10px] font-bold text-digi-cyan uppercase tracking-widest">Mundo Aberto</span>
-            </div>
-            <div className="h-32 bg-slate-800 relative bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] cursor-pointer" onClick={() => setActiveModal('map')}>
-               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-digi-cyan rounded-full border border-white shadow-[0_0_5px_cyan] animate-pulse"></div>
-            </div>
+      {/* CHAT BOX DIREITA (Abaixo do Analyzer, na esquerda!) */}
+      <div className="absolute bottom-4 left-4 w-[240px] h-[180px] z-40 bg-[#0f121a] border border-[#1e293b] rounded-lg shadow-2xl flex flex-col pointer-events-auto overflow-hidden">
+        <div className="flex bg-[#0a0f1a] border-b border-[#1e293b]">
+          <button onClick={() => setActiveChatTab('mundo')} className={`flex-1 py-1.5 text-[9px] font-bold uppercase tracking-wider transition-colors ${activeChatTab === 'mundo' ? 'text-[#facc15] border-b-2 border-[#facc15] bg-[#141824]' : 'text-slate-400 hover:text-white hover:bg-[#141824]'}`}>Mundo</button>
+          <button onClick={() => setActiveChatTab('comercio')} className={`flex-1 py-1.5 text-[9px] font-bold uppercase tracking-wider transition-colors ${activeChatTab === 'comercio' ? 'text-[#facc15] border-b-2 border-[#facc15] bg-[#141824]' : 'text-slate-400 hover:text-white hover:bg-[#141824]'}`}>Comércio</button>
+          <div className="w-4 flex items-center justify-center border-l border-[#1e293b]">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
           </div>
+        </div>
+        
+        <div className="flex-1 p-2 overflow-y-auto space-y-1.5 bg-[#0f121a] custom-scrollbar">
+          {chatMessages.map((msg, i) => (
+            <div key={i} className="text-[10px] leading-tight">
+              <span className="text-[#a38035] text-[9px] mr-1">{msg.time}</span>
+              <span className="text-[#38bdf8] font-bold mr-1">[{msg.level}] {msg.author}:</span>
+              <span className="text-white drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">{msg.text}</span>
+            </div>
+          ))}
+          <div ref={chatEndRef} />
+        </div>
+        
+        <form onSubmit={handleSendMessage} className="p-1.5 bg-[#0a0f1a] border-t border-[#1e293b] flex gap-1.5 items-center relative">
+          <input 
+            type="text" 
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            placeholder="Falar no Mundo..." 
+            className="flex-1 bg-[#050811] border border-[#2d3748] rounded px-2 h-7 text-[10px] text-white outline-none focus:border-[#facc15]" 
+          />
+          <button type="submit" className="bg-[#141824] border border-[#2d3748] text-slate-300 text-[9px] font-bold h-7 px-2 rounded hover:bg-[#1e293b] hover:text-white transition-colors">Enviar</button>
+        </form>
+      </div>
+
+      {/* ANALYZER DOCKED NA DIREITA (Fica aberto na tela) */}
+      {activeModal === 'quests' && (
+        <div className="absolute top-[60px] right-4 bottom-4 w-[280px] bg-[#0f121a] border border-[#1e293b] rounded-lg shadow-2xl flex flex-col pointer-events-auto z-40 overflow-hidden animate-in slide-in-from-right duration-300">
+           
+           <div className="bg-[#141824] border-b border-[#1e293b] p-3 flex justify-between items-center">
+              <h3 className="text-cyan-400 font-bold tracking-widest uppercase text-[10px] flex items-center gap-2">
+                📊 Hunt Analyzer
+              </h3>
+              <button onClick={() => setActiveModal(null)} className="text-slate-500 hover:text-white transition-colors">✖</button>
+           </div>
+           
+           <div className="flex-1 p-4 overflow-y-auto custom-scrollbar space-y-4">
+              <div className="text-center"><span className="text-[10px] text-cyan-500/70 font-bold uppercase tracking-widest">- SESSÃO ATUAL -</span></div>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-[#111827] border border-[#1e293b] p-3 rounded-md flex flex-col items-center justify-center shadow-sm">
+                  <span className="text-xl grayscale opacity-30 drop-shadow-md mb-1">⚔️</span>
+                  <p className="text-white font-bold text-sm leading-tight">{huntSession.defeated}</p>
+                  <p className="text-slate-500 text-[8px] uppercase font-bold tracking-widest mt-0.5">Derrotados</p>
+                </div>
+                <div className="bg-[#111827] border border-[#1e293b] p-3 rounded-md flex flex-col items-center justify-center shadow-sm">
+                  <span className="text-xl grayscale opacity-30 drop-shadow-md mb-1">⏱️</span>
+                  <p className="text-white font-bold text-sm leading-tight">{huntTimeHours}h {huntTimeMinutes % 60}m</p>
+                  <p className="text-slate-500 text-[8px] uppercase font-bold tracking-widest mt-0.5">Tempo</p>
+                </div>
+                <div className="bg-[#111827] border border-[#1e293b] p-3 rounded-md flex flex-col items-center justify-center shadow-sm">
+                  <span className="text-xl opacity-80 text-yellow-500 drop-shadow-md mb-1">✨</span>
+                  <p className="text-white font-bold text-sm leading-tight">{huntSession.expGained.toLocaleString()}</p>
+                  <p className="text-slate-500 text-[8px] uppercase font-bold tracking-widest mt-0.5">XP Ganha</p>
+                </div>
+                <div className="bg-[#111827] border border-[#1e293b] p-3 rounded-md flex flex-col items-center justify-center shadow-sm">
+                  <span className="text-xl opacity-80 text-red-500 drop-shadow-md mb-1">🛒</span>
+                  <p className="text-red-400 font-bold text-sm leading-tight">-{huntSession.potionsUsed * 100}</p>
+                  <p className="text-slate-500 text-[8px] uppercase font-bold tracking-widest mt-0.5">Supply</p>
+                </div>
+              </div>
+
+              <div className="bg-[#111827] border border-[#1e293b] p-3 rounded-md flex justify-between items-center mt-4">
+                <span className="text-slate-300 font-bold text-[9px] uppercase tracking-widest">Saldo (Loot)</span>
+                <span className="text-yellow-400 font-black text-sm drop-shadow-[0_0_10px_rgba(250,204,21,0.2)]">+{huntSession.bitsGained.toLocaleString()}</span>
+              </div>
+           </div>
+           
+           {/* BOTÃO DA DIGIPÉDIA ENCAIXADO NO FUNDO DO ANALYZER */}
+           <div className="p-3 bg-[#0a0f1a] border-t border-[#1e293b]">
+              <button 
+                onClick={() => setActiveModal('digipedia')} 
+                className="w-full bg-[#141824] border border-[#2d3748] hover:border-yellow-500/50 hover:text-yellow-400 text-slate-300 font-bold py-2.5 rounded-md text-[10px] uppercase tracking-widest transition-colors flex items-center justify-center gap-2 shadow-sm"
+              >
+                <span>📖</span> Abrir Digipédia
+              </button>
+           </div>
         </div>
       )}
 
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex gap-1 bg-slate-950/80 p-1.5 rounded-md border border-slate-700/50 backdrop-blur-sm shadow-2xl pointer-events-auto">
-        {[ 
-          { key: '1', id: 'meat', icon: '🍖', amount: items?.meat || 0 }, 
-          { key: '2', id: 'scan', icon: '💾', amount: items?.scan || 0 }, 
-          { key: '3', id: 'potion', icon: '💊', amount: items?.potion || 0 }
-        ].map((slot) => (
-          <div key={slot.key} onClick={() => useItem(slot.id)} className="relative w-10 h-10 bg-slate-900 border border-slate-700 rounded cursor-pointer flex items-center justify-center hover:border-digi-cyan active:scale-95 transition-all group">
-            <span className="absolute top-0.5 left-1 text-[8px] font-mono text-slate-500">{slot.key}</span>
-            <span className="text-lg">{slot.icon}</span>
-            <span className="absolute bottom-0 right-1 text-[9px] font-bold font-mono text-white drop-shadow-md">{slot.amount}</span>
-          </div>
-        ))}
-      </div>
-
-      {activeModal && <GameModals activeModal={activeModal} closeModal={() => setActiveModal(null)} setCurrentZone={setCurrentZone} handleLogout={handleLogout} />}
+      {/* Renderiza GameModals ignorando o Analyzer (pois ele agora é Docked) */}
+      {activeModal && activeModal !== 'quests' && <GameModals activeModal={activeModal} closeModal={() => setActiveModal(null)} setCurrentZone={setCurrentZone} handleLogout={handleLogout} />}
     </div>
   );
 }

@@ -11,12 +11,14 @@ interface GameModalsProps { activeModal: ModalType; closeModal: () => void; setC
 export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogout }: GameModalsProps) {
   const { user } = useAuthStore();
   const { 
-    tamerName, bits, gems, avatar, equippedOutfit, captureLog, fragments, 
+    tamerName, bits, gems, avatar, equippedOutfit, captureLog, fragments, items,
     ownedDigimons, buyItem, startIncubation, hatchEgg, incubatingEgg, 
-    setMapHunt, equipOutfit, soundEnabled, toggleSound, ownedGear, equippedGear, equipGear, sellFragmentForGems, myDigimons
+    setMapHunt, equipOutfit, soundEnabled, toggleSound, ownedGear, equippedGear, equipGear, sellFragmentForGems, myDigimons, useItem,
+    autoHelper, updateAutoHelper, huntSession,
+    bpp, isPremium, gamePassMissions, buyPremium, claimMission 
   } = useGameStore();
 
-  const [profileTab, setProfileTab] = useState<'main' | 'gear' | 'outfits' | 'logs'>('main');
+  const [profileTab, setProfileTab] = useState<'main' | 'gear' | 'outfits'>('main');
   const [shopTab, setShopTab] = useState<'local' | 'online'>('local');
   const tamerGender = (avatar === 'sora' || avatar === 'mimi') ? 'female' : 'male';
   const [now, setNow] = useState(Date.now());
@@ -28,63 +30,221 @@ export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogo
     }
   }, [activeModal, incubatingEgg]);
 
+  // MAPA MUNDI GLOBAL
+  if (activeModal === 'map') {
+    return (
+      <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm pointer-events-auto">
+        <div className="bg-[#0a0f1a] border border-[#1e293b] w-[90vw] h-[90vh] rounded-lg shadow-2xl flex flex-col overflow-hidden font-sans">
+           <div className="bg-[#111827] border-b border-[#1e293b] p-3 flex justify-between items-center">
+              <h3 className="text-[#e2c779] font-bold tracking-widest uppercase flex items-center gap-2 text-xs">🗺️ Mapa • Digital World</h3>
+              <div className="flex gap-2">
+                <button onClick={closeModal} className="text-slate-400 hover:text-white px-2 py-0.5 border border-[#1e293b] rounded bg-[#0a0f1a] ml-2 font-bold">✖</button>
+              </div>
+           </div>
+           <div className="flex bg-[#0a0f1a] border-b border-[#1e293b] px-4 pt-3 gap-2">
+             <button className="px-4 py-2 bg-[#111827] border-t border-l border-r border-[#1e293b] text-[#e2c779] font-bold text-[10px] rounded-t-lg">ILHA ARQUIVO</button>
+             <button className="px-4 py-2 bg-[#0a0f1a] text-slate-500 font-bold text-[10px] flex flex-col items-center leading-tight">CONTINENTE SERVER <span className="text-[8px] font-normal">Indisponível</span></button>
+           </div>
+           <div className="flex-1 relative bg-[#3b5b82] overflow-hidden">
+              <div className="absolute top-[10%] left-[15%] w-[30%] h-[40%] bg-[#5b8c5a] rounded-[100px] blur-md opacity-80"></div>
+              <div className="absolute bottom-[20%] right-[10%] w-[40%] h-[30%] bg-[#5b8c5a] rounded-[100px] blur-md opacity-80"></div>
+              <div className="absolute top-[50%] left-[45%] w-[20%] h-[20%] bg-[#c2b280] rounded-[50px] blur-md opacity-80"></div>
+
+              <button onClick={() => { setMapHunt('koromon', 'Koromon', 1, '/koromon-esq.png', 'Normal'); closeModal(); setCurrentZone('floresta'); }} className="absolute top-[25%] left-[25%] flex flex-col items-center group transform -translate-x-1/2 -translate-y-1/2 hover:scale-110 transition-transform">
+                <div className="w-[42px] h-[42px] bg-[#111827] rounded-full border-2 border-[#eab308] flex items-center justify-center relative overflow-hidden shadow-lg group-hover:border-white">
+                   <img src="/koromon-init.png" className="w-8 h-8 object-contain relative z-10 drop-shadow-[0_2px_2px_black]" />
+                </div>
+                <div className="mt-1 text-center font-sans">
+                   <p className="text-[10px] font-bold text-white uppercase drop-shadow-[0_1px_1px_black]">Koromon</p>
+                   <p className="text-[9px] text-[#4ade80] font-bold drop-shadow-[0_1px_1px_black]">Nv 1</p>
+                </div>
+              </button>
+
+              <button onClick={() => { setMapHunt('agumon', 'Agumon', 20, '/agu-anima.png', 'Normal'); closeModal(); setCurrentZone('floresta'); }} className="absolute top-[55%] left-[50%] flex flex-col items-center group transform -translate-x-1/2 -translate-y-1/2 hover:scale-110 transition-transform">
+                <div className="w-[42px] h-[42px] bg-[#111827] rounded-full border-2 border-[#eab308] flex items-center justify-center relative overflow-hidden shadow-lg group-hover:border-white">
+                   <img src="/agumon-init.png" className="w-8 h-8 object-contain relative z-10 drop-shadow-[0_2px_2px_black]" />
+                </div>
+                <div className="mt-1 text-center font-sans">
+                   <p className="text-[10px] font-bold text-white uppercase drop-shadow-[0_1px_1px_black]">Agumon</p>
+                   <p className="text-[9px] text-[#4ade80] font-bold drop-shadow-[0_1px_1px_black]">Nv 20</p>
+                </div>
+              </button>
+           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // GAME PASS
+  if (activeModal === 'gamepass') {
+    return (
+      <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm pointer-events-auto">
+        <div className="bg-[#0a0f1a] border border-[#1e293b] w-[600px] max-h-[85vh] rounded-lg shadow-2xl flex flex-col overflow-hidden font-sans">
+          
+          <div className="flex justify-between items-center px-4 py-3 bg-[#111827] border-b border-[#1e293b]">
+             <h3 className="text-white font-bold tracking-widest uppercase flex items-center gap-2 text-[12px]">
+               🏅 Game Pass
+             </h3>
+             <div className="flex items-center gap-4">
+               <div className="bg-[#eab308]/20 border border-[#eab308]/50 text-[#facc15] px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-[inset_0_0_10px_rgba(234,179,8,0.2)]">
+                 ⭐ {bpp} BPP
+               </div>
+               <button onClick={closeModal} className="text-slate-500 hover:text-red-500 transition-colors font-bold text-lg leading-none">✖</button>
+             </div>
+          </div>
+
+          <div className="px-4 py-4 border-b border-[#1e293b]">
+             <button onClick={buyPremium} disabled={isPremium} className={`w-full font-bold py-3 rounded-lg flex items-center justify-center gap-2 text-[11px] shadow-lg transition-colors uppercase tracking-widest ${isPremium ? 'bg-green-600/20 text-green-400 border border-green-500/50 cursor-not-allowed' : 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white'}`}>
+                {isPremium ? '👑 Premium Desbloqueado' : '👑 Desbloquear o Premium - 💎 15'}
+             </button>
+          </div>
+
+          <div className="px-4 py-3 border-b border-[#1e293b]">
+             <h4 className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mb-3">Trilha de Recompensas</h4>
+             <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+               {[1, 2, 3, 4, 5, 6, 7, 8].map(tier => (
+                  <div key={tier} className="flex flex-col gap-1.5 min-w-[55px]">
+                     <div className="text-center text-[10px] font-bold text-slate-300">T{tier}</div>
+                     
+                     <div className={`border rounded p-1.5 flex flex-col items-center justify-center relative h-[55px] ${bpp >= tier * 10 ? 'bg-green-900/20 border-green-500/30' : 'bg-[#111827] border-[#1e293b]'}`}>
+                        <span className="text-lg drop-shadow-md">🍖</span>
+                        <span className="text-[8px] font-bold text-slate-400 mt-0.5">x{tier * 10}</span>
+                        {bpp >= tier * 10 && <span className="absolute top-0.5 right-0.5 text-green-400 text-[10px] drop-shadow-[0_0_2px_black]">✓</span>}
+                     </div>
+                     
+                     <div className={`border rounded p-1.5 flex flex-col items-center justify-center relative h-[55px] ${isPremium && bpp >= tier * 10 ? 'bg-blue-900/20 border-blue-500/30' : 'bg-[#111827] border-[#1e293b]'}`}>
+                        <span className="text-lg drop-shadow-md">💎</span>
+                        <span className="text-[8px] font-bold text-slate-400 mt-0.5">x{tier * 2}</span>
+                        {!isPremium && <span className="absolute inset-0 bg-black/60 flex items-center justify-center text-sm backdrop-blur-[1px] rounded">🔒</span>}
+                        {isPremium && bpp >= tier * 10 && <span className="absolute top-0.5 right-0.5 text-green-400 text-[10px] drop-shadow-[0_0_2px_black]">✓</span>}
+                     </div>
+                  </div>
+               ))}
+             </div>
+          </div>
+
+          <div className="px-4 py-3 flex-1 overflow-y-auto custom-scrollbar">
+             <h4 className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mb-3">Missões (Ganhe BPP)</h4>
+             <div className="space-y-2">
+               {gamePassMissions.map(m => {
+                 const visual = digimonDict[m.targetId] || { menuImg: '' };
+                 return (
+                   <div key={m.id} className="bg-[#111827] border border-[#1e293b] rounded-lg p-3 flex items-center gap-3 hover:border-[#334155] transition-colors">
+                      <div className="w-10 h-10 bg-[#0a0f1a] border border-[#1e293b] rounded-full flex items-center justify-center shadow-inner overflow-hidden flex-shrink-0">
+                         <img src={visual.menuImg} className="w-7 h-7 object-contain" />
+                      </div>
+                      <div className="flex-1">
+                        <h5 className="text-[11px] font-bold text-white mb-1.5 uppercase tracking-wide">{m.desc}</h5>
+                        <div className="w-full h-1.5 bg-[#0a0f1a] rounded-full overflow-hidden border border-[#1e293b]">
+                          <div className="h-full bg-[#2563eb]" style={{ width: `${Math.min(100, (m.current / m.target) * 100)}%` }}></div>
+                        </div>
+                        <p className="text-[9px] text-slate-400 mt-1 font-mono">{m.current}/{m.target} • +{m.reward} BPP</p>
+                      </div>
+                      <button 
+                        onClick={() => claimMission(m.id)}
+                        disabled={m.current < m.target || m.claimed}
+                        className={`px-3 py-1.5 rounded text-[9px] font-bold uppercase tracking-widest transition-colors ${m.claimed ? 'bg-green-500/10 text-green-400 border border-green-500/30' : m.current >= m.target ? 'bg-[#2563eb] text-white hover:bg-[#1d4ed8] shadow-[0_0_10px_rgba(37,99,235,0.4)]' : 'bg-[#1e293b] text-slate-500 cursor-not-allowed'}`}
+                      >
+                        {m.claimed ? 'Concluído' : 'Resgatar'}
+                      </button>
+                   </div>
+                 )
+               })}
+             </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  // MODAIS PADRÃO
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto">
-      <div className="bg-slate-950 border border-slate-700 w-[600px] rounded-lg shadow-2xl flex flex-col overflow-hidden">
+      <div className="bg-[#0a0f1a] border border-[#1e293b] w-[600px] max-h-[85vh] rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden font-sans relative">
         
-        <div className="bg-slate-900 border-b border-slate-800 p-3 flex justify-between items-center">
-          <h3 className="text-digi-gold font-bold tracking-widest uppercase flex items-center gap-2">
+        {/* HEADER */}
+        <div className="p-4 flex justify-between items-center border-b border-[#1e293b] relative bg-[#0a0f1a]">
+          <div className="absolute left-0 top-0 bottom-0 w-1 bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"></div>
+          <h3 className="text-cyan-400 font-bold tracking-widest uppercase flex items-center gap-2 text-[11px] ml-2">
             {activeModal === 'inventory' && '🎒 Mochila de Itens'}
-            {activeModal === 'shop' && '🛒 Comércio Global'}
-            {activeModal === 'map' && '🗺️ Mapa Global'}
-            {activeModal === 'pc' && '💻 Incubadora de Ovos'}
-            {activeModal === 'quests' && '📜 Central de Missões'}
-            {activeModal === 'profile' && '👤 Perfil do Tamer'}
-            {activeModal === 'digipedia' && '📖 Digipedia (Enciclopédia)'}
-            {activeModal === 'settings' && '⚙️ Configurações do Jogo'}
+            {activeModal === 'shop' && '🛒 Mercado'}
+            {activeModal === 'pc' && '💻 Digi-Bank'}
+            {activeModal === 'profile' && '👤 Perfil'}
+            {activeModal === 'digipedia' && '📖 Digipedia'}
+            {activeModal === 'settings' && '⚙️ Auto-Helper'}
           </h3>
-          <button onClick={closeModal} className="text-slate-500 hover:text-red-500 transition-colors font-bold text-lg">×</button>
+          <button onClick={closeModal} className="text-slate-400 hover:text-cyan-400 transition-colors font-bold text-lg leading-none">✖</button>
         </div>
         
-        <div className="p-4 h-[400px] overflow-y-auto">
+        <div className="p-5 overflow-y-auto custom-scrollbar">
+
+          {/* NOVA MOCHILA (INVENTORY) */}
+          {activeModal === 'inventory' && (
+            <div className="space-y-4">
+               <div className="bg-[#111827] border border-[#1e293b] p-3 rounded-lg text-center shadow-sm mb-4">
+                  <p className="text-cyan-400 text-[11px] font-bold uppercase tracking-widest">Suprimentos de Caça</p>
+                  <p className="text-slate-500 text-[9px] mt-1 tracking-widest uppercase">Use seus itens para manter seu Digimon em combate.</p>
+               </div>
+               
+               <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-[#111827] border border-[#1e293b] p-4 rounded-lg flex flex-col items-center hover:border-[#334155] transition-colors">
+                     <span className="text-4xl mb-2 drop-shadow-md">🍖</span>
+                     <span className="text-white text-[11px] font-bold uppercase tracking-widest">Carne</span>
+                     <span className="text-slate-400 text-[9px] mb-3 font-mono">Qtd: {items.meat || 0}</span>
+                     <button onClick={() => useItem('meat')} className="bg-[#1e293b] hover:bg-[#334155] text-white text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-md w-full transition-colors">Usar (Cura 30)</button>
+                  </div>
+                  <div className="bg-[#111827] border border-[#1e293b] p-4 rounded-lg flex flex-col items-center hover:border-[#334155] transition-colors">
+                     <span className="text-4xl mb-2 drop-shadow-md">💊</span>
+                     <span className="text-white text-[11px] font-bold uppercase tracking-widest">Poção</span>
+                     <span className="text-slate-400 text-[9px] mb-3 font-mono">Qtd: {items.potion || 0}</span>
+                     <button onClick={() => useItem('potion')} className="bg-[#1e293b] hover:bg-[#334155] text-white text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-md w-full transition-colors">Usar (Cura 100)</button>
+                  </div>
+                  <div className="bg-[#111827] border border-[#1e293b] p-4 rounded-lg flex flex-col items-center hover:border-[#334155] transition-colors">
+                     <span className="text-4xl mb-2 drop-shadow-md">💾</span>
+                     <span className="text-white text-[11px] font-bold uppercase tracking-widest">Data Scan</span>
+                     <span className="text-slate-400 text-[9px] mb-3 font-mono">Qtd: {items.scan || 0}</span>
+                     <button className="bg-[#0a0f1a] border border-[#1e293b] text-slate-500 text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-md w-full cursor-not-allowed">Automático</button>
+                  </div>
+               </div>
+            </div>
+          )}
           
+          {/* PROFILE */}
           {activeModal === 'profile' && (
             <div className="flex flex-col h-full">
-              <div className="flex border-b border-slate-800 bg-slate-900/50 p-2 gap-2 mb-4">
-                <button onClick={() => setProfileTab('main')} className={`px-4 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${profileTab === 'main' ? 'bg-digi-cyan text-slate-950 shadow-[0_0_10px_rgba(0,229,255,0.4)]' : 'text-slate-400 hover:text-white'}`}>👤 Dados</button>
-                <button onClick={() => setProfileTab('gear')} className={`px-4 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${profileTab === 'gear' ? 'bg-digi-cyan text-slate-950 shadow-[0_0_10px_rgba(0,229,255,0.4)]' : 'text-slate-400 hover:text-white'}`}>⚔️ Equipamentos</button>
-                <button onClick={() => setProfileTab('outfits')} className={`px-4 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${profileTab === 'outfits' ? 'bg-digi-cyan text-slate-950 shadow-[0_0_10px_rgba(0,229,255,0.4)]' : 'text-slate-400 hover:text-white'}`}>👕 Outfits</button>
-                <button onClick={() => setProfileTab('logs')} className={`px-4 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${profileTab === 'logs' ? 'bg-digi-cyan text-slate-950 shadow-[0_0_10px_rgba(0,229,255,0.4)]' : 'text-slate-400 hover:text-white'}`}>📜 Log de Caça</button>
+              <div className="flex border-b border-[#1e293b] pb-3 gap-3 mb-5">
+                <button onClick={() => setProfileTab('main')} className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${profileTab === 'main' ? 'bg-[#111827] border border-[#1e293b] text-cyan-400' : 'border border-transparent text-slate-500 hover:text-slate-300'}`}>👤 Dados</button>
+                <button onClick={() => setProfileTab('gear')} className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${profileTab === 'gear' ? 'bg-[#111827] border border-[#1e293b] text-cyan-400' : 'border border-transparent text-slate-500 hover:text-slate-300'}`}>⚔️ Gear</button>
+                <button onClick={() => setProfileTab('outfits')} className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${profileTab === 'outfits' ? 'bg-[#111827] border border-[#1e293b] text-cyan-400' : 'border border-transparent text-slate-500 hover:text-slate-300'}`}>👕 Outfits</button>
               </div>
 
               <div className="flex-1 overflow-y-auto">
                 {profileTab === 'main' && (
                   <div className="flex flex-col items-center space-y-6">
-                    <div className="w-24 h-24 bg-slate-950 rounded-full border-4 border-digi-cyan shadow-[0_0_20px_rgba(0,229,255,0.2)] overflow-hidden flex items-center justify-center relative"><TamerPortrait gender={tamerGender} /></div>
-                    <div className="text-center space-y-1 w-full">
-                      <div className="flex items-center justify-center gap-2">
-                        <span className="bg-blue-600/30 border border-blue-500 text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded uppercase">VIP Ativo</span>
-                        <h2 className="text-xl font-bold text-slate-200 uppercase tracking-widest">{user?.displayName || tamerName}</h2>
-                      </div>
-                      <p className="text-xs text-slate-500 font-mono">Nível 397 • Desde 01/08/2026</p>
-                      <p className="text-xs text-red-400 font-mono mt-2">Multiplicador de Dano: {equippedGear ? '+50%' : 'Nenhum'}</p>
+                    <div className="w-24 h-24 bg-[#111827] rounded-full border-2 border-cyan-400 overflow-hidden flex items-center justify-center relative shadow-[0_0_15px_rgba(34,211,238,0.2)]">
+                      <TamerPortrait gender={tamerGender} />
                     </div>
-                    <button onClick={handleLogout} className="w-full bg-red-950/40 border border-red-900 text-red-400 font-bold py-2.5 rounded uppercase tracking-widest hover:bg-red-900 hover:text-white transition-colors">Sair do Jogo</button>
+                    <div className="text-center space-y-1 w-full">
+                      <h2 className="text-xl font-bold text-white uppercase tracking-widest drop-shadow-md">{user?.displayName || tamerName}</h2>
+                      <p className="text-[10px] text-yellow-400 font-bold tracking-widest uppercase">VIP Status: Ativo</p>
+                      <p className="text-[10px] text-cyan-400 font-mono mt-2 tracking-widest">Dano Bônus: {equippedGear ? '+50%' : '0%'}</p>
+                    </div>
+                    <button onClick={handleLogout} className="w-full bg-[#3f1922] border border-[#7f1d1d] text-[#fca5a5] font-bold py-2.5 rounded-md uppercase tracking-widest hover:bg-[#7f1d1d] hover:text-white transition-colors text-[10px]">Logout</button>
                   </div>
                 )}
                 {profileTab === 'gear' && (
                   <div className="space-y-4">
-                    <h4 className="text-xs font-bold text-digi-gold uppercase tracking-widest mb-2">Seus Equipamentos (Drops de Chefes)</h4>
                     {ownedGear.length === 0 ? (
-                      <div className="text-center p-8 border border-dashed border-slate-700 rounded-lg text-slate-500 text-xs">Nenhum equipamento raro dropado ainda.</div>
+                      <div className="text-center p-8 border border-dashed border-[#1e293b] rounded-lg text-slate-500 text-[10px] tracking-widest uppercase">Sem gear raro.</div>
                     ) : (
                       <div className="grid grid-cols-2 gap-4">
                         {ownedGear.includes('garra_combate') && (
-                          <div onClick={() => equipGear('garra_combate')} className={`bg-slate-900 border-2 rounded-xl p-4 flex flex-col items-center cursor-pointer transition-all ${equippedGear === 'garra_combate' ? 'border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'border-slate-800 hover:border-slate-600'}`}>
-                            <span className="text-4xl mb-2 drop-shadow-md">🩸</span>
-                            <span className="font-bold text-xs text-slate-200 uppercase text-center">Garra de Combate</span>
+                          <div onClick={() => equipGear('garra_combate')} className={`bg-[#111827] border rounded-lg p-4 flex flex-col items-center cursor-pointer transition-all ${equippedGear === 'garra_combate' ? 'border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.1)]' : 'border-[#1e293b] hover:border-[#334155]'}`}>
+                            <span className="text-4xl mb-2 drop-shadow-[0_0_10px_red]">🩸</span>
+                            <span className="font-bold text-[10px] text-slate-200 uppercase tracking-widest text-center">Garra de Combate</span>
                             <span className="text-[10px] text-red-400 mt-1 font-black">+50% DANO</span>
-                            {equippedGear === 'garra_combate' && <span className="text-[10px] text-emerald-400 mt-1">Equipada ✓</span>}
+                            {equippedGear === 'garra_combate' && <span className="text-[9px] text-cyan-400 mt-1 font-bold tracking-widest uppercase">Equipada</span>}
                           </div>
                         )}
                       </div>
@@ -93,73 +253,144 @@ export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogo
                 )}
                 {profileTab === 'outfits' && (
                   <div className="space-y-4">
-                    <h4 className="text-xs font-bold text-digi-gold uppercase tracking-widest mb-2">Escolhe a tua Aparência</h4>
                     <div className="grid grid-cols-2 gap-4">
-                      <div onClick={() => equipOutfit('default')} className={`bg-slate-900 border-2 rounded-xl p-4 flex flex-col items-center cursor-pointer transition-all ${equippedOutfit === 'default' ? 'border-digi-gold shadow-[0_0_15px_rgba(255,215,0,0.3)]' : 'border-slate-800 hover:border-slate-600'}`}>
-                        <div className="w-16 h-16 bg-slate-950 rounded-lg flex items-center justify-center mb-2 overflow-hidden border border-slate-700">
+                      <div onClick={() => equipOutfit('default')} className={`bg-[#111827] border rounded-lg p-4 flex flex-col items-center cursor-pointer transition-all ${equippedOutfit === 'default' ? 'border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.1)]' : 'border-[#1e293b] hover:border-[#334155]'}`}>
+                        <div className="w-16 h-16 bg-[#000] rounded-full flex items-center justify-center mb-2 overflow-hidden border border-[#1e293b]">
                           <TamerPortrait gender={tamerGender} />
                         </div>
-                        <span className="font-bold text-xs text-slate-200 uppercase">Treinador Clássico</span>
-                        <span className="text-[10px] text-emerald-400 mt-1">Equipada ✓</span>
+                        <span className="font-bold text-[10px] text-slate-200 uppercase tracking-widest">Clássico</span>
                       </div>
                     </div>
-                  </div>
-                )}
-                {profileTab === 'logs' && (
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-bold text-digi-cyan uppercase tracking-widest mb-2">Registo de Inimigos e Capturas</h4>
-                    {captureLog && captureLog.length > 0 ? (
-                      <div className="space-y-2">
-                        {captureLog.map((log, index) => (
-                          <div key={index} className="bg-slate-900 border border-slate-800 p-2.5 rounded flex justify-between items-center text-xs font-mono">
-                            <span className="text-slate-200">⚔️ Derrotaste <strong className="text-digi-gold">{log.name}</strong> (Nível {log.level})</span>
-                            <span className="text-slate-500 text-[10px]">{log.timestamp}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center p-8 border border-dashed border-slate-800 rounded-lg text-slate-500 text-xs font-mono">Ainda nenhum registo de caça gravado.</div>
-                    )}
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {activeModal === 'inventory' && (
-            <div className="text-center text-slate-500">Mochila acessível apenas pela Hotbar no momento.</div>
+          {/* AUTO-HELPER (Combinado Potion e Scan) */}
+          {activeModal === 'settings' && (
+            <div className="space-y-4">
+              <div className="bg-[#111827] border border-[#1e293b] p-4 rounded-lg flex items-center justify-between">
+                 <div>
+                   <span className="text-[11px] font-bold text-slate-200 block uppercase tracking-widest">Música e Efeitos (SFX)</span>
+                 </div>
+                 <button onClick={toggleSound} className={`text-[10px] font-bold px-4 py-2 rounded-md uppercase tracking-widest transition-colors border ${soundEnabled ? 'bg-[#0f2933] border-[#22d3ee] text-cyan-400' : 'bg-transparent border-[#334155] text-slate-500 hover:border-slate-400'}`}>
+                   {soundEnabled ? 'ON' : 'OFF'}
+                 </button>
+              </div>
+
+              <div className="bg-[#111827] border border-[#1e293b] rounded-lg overflow-hidden p-4 space-y-6">
+                
+                {/* Modulo Auto-Potion */}
+                <div className="border-b border-[#1e293b] pb-5">
+                  <div className="flex items-center gap-3 mb-4">
+                    <input type="checkbox" checked={autoHelper.autoPotion} onChange={(e) => updateAutoHelper({ autoPotion: e.target.checked })} className="w-4 h-4 accent-cyan-400 cursor-pointer" />
+                    <span className="font-bold text-[12px] text-white flex items-center gap-2 uppercase tracking-widest">💊 Auto-Potion</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-[#0a0f1a] border border-[#1e293b] p-3 rounded-md">
+                     <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Curar com HP ≤</span>
+                     <select value={autoHelper.potionThreshold} onChange={(e) => updateAutoHelper({ potionThreshold: Number(e.target.value) })} className="bg-[#111827] border border-[#1e293b] text-cyan-400 text-[10px] font-bold px-3 py-1.5 rounded-md outline-none cursor-pointer tracking-widest">
+                       <option value={90}>90%</option>
+                       <option value={75}>75%</option>
+                       <option value={50}>50%</option>
+                       <option value={25}>25%</option>
+                     </select>
+                  </div>
+                </div>
+
+                {/* Modulo Auto-Scan */}
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <input type="checkbox" checked={autoHelper.autoScan} onChange={(e) => updateAutoHelper({ autoScan: e.target.checked })} className="w-4 h-4 accent-cyan-400 cursor-pointer" />
+                    <span className="font-bold text-[12px] text-white flex items-center gap-2 uppercase tracking-widest">💾 Auto-Scan (Catch)</span>
+                  </div>
+                  <div className="bg-[#0a0f1a] border border-[#1e293b] p-3 rounded-md flex justify-between items-center">
+                     <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Scans Disponíveis:</span>
+                     <div className="bg-[#111827] border border-[#1e293b] px-3 py-1.5 rounded-md flex items-center gap-2 shadow-inner">
+                       <span className="text-cyan-400 text-[11px] font-bold tracking-widest">{items.scan || 0}</span>
+                     </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
           )}
 
+          {/* LOG DE CAPTURAS (DIGIPEDIA) */}
+          {activeModal === 'digipedia' && (
+            <div className="flex flex-col h-full space-y-3">
+              <div className="flex justify-between items-center bg-[#111827] p-3 rounded-lg border border-[#1e293b]">
+                 <span className="text-[10px] text-white font-bold uppercase tracking-widest">Total Capturado: <span className="text-cyan-400">{captureLog.length}</span></span>
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                 {captureLog.length === 0 ? <p className="text-center text-slate-500 text-[10px] uppercase tracking-widest py-8">Nenhum registro.</p> : captureLog.map((log, i) => (
+                   <div key={i} className="bg-[#111827] border border-[#1e293b] p-3 rounded-lg flex justify-between items-center hover:border-[#334155] transition-colors">
+                     <div className="flex items-center gap-4">
+                        <div className="bg-[#0a0f1a] border border-[#1e293b] rounded-full p-1.5 shadow-inner">
+                          <img src={digimonDict[log.name.toLowerCase()]?.menuImg || '/koromon-init.png'} className="w-8 h-8 object-contain drop-shadow-[0_0_5px_rgba(0,0,0,0.8)]" />
+                        </div>
+                        <div>
+                          <span className="text-[11px] text-slate-200 font-bold tracking-widest uppercase">{log.name}</span>
+                          <div className="flex items-center gap-2 mt-1">
+                             <span className="text-[10px] text-cyan-400 font-bold font-mono">Lv.{log.level}</span>
+                             <span className={`text-[9px] font-bold uppercase tracking-widest ${log.rarity === 'Divino' ? 'text-yellow-400' : log.rarity === 'Chefe' ? 'text-red-400' : log.rarity === 'Elite' ? 'text-blue-400' : 'text-slate-400'}`}>{log.rarity}</span>
+                          </div>
+                        </div>
+                     </div>
+                     <div className="text-right">
+                       <span className="text-[9px] text-slate-500 font-mono tracking-wider">{log.timestamp}</span>
+                     </div>
+                   </div>
+                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* SHOP */}
           {activeModal === 'shop' && (
              <div className="flex flex-col h-full">
-               <div className="flex border-b border-slate-800 bg-slate-900/50 p-2 gap-2 mb-4">
-                 <button onClick={() => setShopTab('local')} className={`px-4 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${shopTab === 'local' ? 'bg-digi-cyan text-slate-950' : 'text-slate-400 hover:text-white'}`}>🛒 NPC Local</button>
-                 <button onClick={() => setShopTab('online')} className={`px-4 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-all ${shopTab === 'online' ? 'bg-emerald-400 text-slate-950' : 'text-slate-400 hover:text-white'}`}>🤝 Mercado Aberto</button>
+               <div className="flex border-b border-[#1e293b] pb-3 gap-3 mb-5">
+                 <button onClick={() => setShopTab('local')} className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${shopTab === 'local' ? 'bg-[#111827] border border-[#1e293b] text-cyan-400' : 'border border-transparent text-slate-500 hover:text-slate-300'}`}>🛒 NPC Local</button>
+                 <button onClick={() => setShopTab('online')} className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${shopTab === 'online' ? 'bg-[#111827] border border-[#1e293b] text-cyan-400' : 'border border-transparent text-slate-500 hover:text-slate-300'}`}>🤝 Player Trade</button>
                </div>
                {shopTab === 'local' ? (
-                 <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => buyItem('meat', 1000, 'bits', 10)} className="bg-slate-900 border border-slate-800 p-3 rounded flex justify-between items-center hover:border-digi-cyan active:scale-95 transition-all"><div className="flex items-center gap-2"><span className="text-xl">🍖</span> <span className="text-xs font-bold text-slate-300">Carne x10</span></div><span className="text-digi-gold text-xs font-mono">1.000 Bits</span></button>
-                    <button onClick={() => buyItem('potion', 2500, 'bits', 5)} className="bg-slate-900 border border-slate-800 p-3 rounded flex justify-between items-center hover:border-digi-cyan active:scale-95 transition-all"><div className="flex items-center gap-2"><span className="text-xl">💊</span> <span className="text-xs font-bold text-slate-300">Poção x5</span></div><span className="text-digi-gold text-xs font-mono">2.500 Bits</span></button>
+                 <div className="grid grid-cols-2 gap-4">
+                    <button onClick={() => buyItem('meat', 1000, 'bits', 10)} className="bg-[#111827] border border-[#1e293b] p-4 rounded-lg flex justify-between items-center hover:border-[#334155] transition-all shadow-[inset_0_0_10px_rgba(0,0,0,0.2)]">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl drop-shadow-md">🍖</span> 
+                        <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Carne x10</span>
+                      </div>
+                      <span className="text-yellow-400 text-[10px] font-bold font-mono tracking-widest">1.000 Bits</span>
+                    </button>
+                    <button onClick={() => buyItem('potion', 2500, 'bits', 5)} className="bg-[#111827] border border-[#1e293b] p-4 rounded-lg flex justify-between items-center hover:border-[#334155] transition-all shadow-[inset_0_0_10px_rgba(0,0,0,0.2)]">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl drop-shadow-md">💊</span> 
+                        <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Poção x5</span>
+                      </div>
+                      <span className="text-yellow-400 text-[10px] font-bold font-mono tracking-widest">2.500 Bits</span>
+                    </button>
                  </div>
                ) : (
                  <div className="space-y-4">
-                    <div className="bg-emerald-950/30 border border-emerald-900 p-3 rounded text-center">
-                      <p className="text-emerald-400 text-xs font-bold uppercase tracking-widest">Venda de Fragmentos (Player Trade)</p>
-                      <p className="text-slate-400 text-[10px] mt-1">Troque seus dados repetidos por Gemas Premium.</p>
+                    <div className="bg-[#111827] border border-[#1e293b] p-3 rounded-lg text-center shadow-sm">
+                      <p className="text-cyan-400 text-[11px] font-bold uppercase tracking-widest">Trade Global</p>
+                      <p className="text-slate-500 text-[9px] mt-1 tracking-widest uppercase">Venda fragmentos repetidos por Gemas.</p>
                     </div>
                     {Object.entries(fragments).filter(([_, amt]) => amt >= 10).length === 0 ? (
-                      <div className="text-center p-8 border border-dashed border-slate-700 rounded-lg text-slate-500 text-xs">Você precisa de pelo menos 10 fragmentos de um mesmo Digimon para anunciar no Mercado.</div>
+                      <div className="text-center p-8 border border-dashed border-[#1e293b] rounded-lg text-slate-500 text-[10px] uppercase tracking-widest">Mínimo de 10 fragmentos necessários.</div>
                     ) : (
                       <div className="grid grid-cols-1 gap-3">
                         {Object.entries(fragments).filter(([_, amt]) => amt >= 10).map(([id, amount]) => {
                           const data = digimonDict[id] || { name: '???', menuImg: '' };
                           return (
-                            <div key={id} className="bg-slate-900 border border-slate-800 p-3 rounded-lg flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <MenuSprite visual={data} className="w-10 h-10 bg-slate-950 rounded border border-slate-700 p-1" />
-                                <div><h4 className="text-slate-200 font-bold uppercase text-xs">{data.name} Data</h4><span className="text-[10px] text-slate-400 font-mono">Você tem: {amount}</span></div>
+                            <div key={id} className="bg-[#111827] border border-[#1e293b] p-3 rounded-lg flex items-center justify-between hover:border-[#334155] transition-colors">
+                              <div className="flex items-center gap-4">
+                                <div className="bg-[#0a0f1a] rounded-full border border-[#1e293b] p-1.5 flex items-center justify-center shadow-inner">
+                                  <img src={data.menuImg} className="w-8 h-8 object-contain" />
+                                </div>
+                                <div><h4 className="text-slate-200 font-bold uppercase text-[10px] tracking-widest">{data.name} Data</h4><span className="text-[9px] text-cyan-500 font-mono tracking-widest">Possui: <span className="text-cyan-400 font-bold">{amount}</span></span></div>
                               </div>
-                              <button onClick={() => sellFragmentForGems(id, 10)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded text-xs font-bold uppercase transition-all flex items-center gap-1 shadow-lg">Vender 10x <span className="text-cyan-200">💎 20</span></button>
+                              <button onClick={() => sellFragmentForGems(id, 10)} className="bg-[#162a1c] border border-yellow-500/30 hover:bg-[#203c27] text-yellow-400 px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 transition-colors">Vender 10 <span className="text-white drop-shadow-md">💎 20</span></button>
                             </div>
                           );
                         })}
@@ -170,37 +401,31 @@ export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogo
              </div>
           )}
 
+          {/* INCUBADORA */}
           {activeModal === 'pc' && (
             <div className="space-y-6">
-              <div className="bg-blue-950/20 border-2 border-blue-900 rounded-xl p-4 flex flex-col items-center relative overflow-hidden">
-                <div className="absolute top-0 right-0 bg-blue-600 text-white text-[8px] font-black px-2 py-1 rounded-bl-lg uppercase">Incubadora Premium</div>
+              <div className="bg-[#0a0f1a] border border-[#1e293b] rounded-lg p-6 flex flex-col items-center relative overflow-hidden shadow-inner">
+                <div className="absolute top-0 right-0 bg-[#111827] border-l border-b border-[#1e293b] text-cyan-400 text-[8px] font-bold px-3 py-1 rounded-bl-lg uppercase tracking-widest">Incubadora Premium</div>
                 {incubatingEgg ? (
                   <div className="flex flex-col items-center text-center z-10 w-full">
-                    <div className="text-6xl mb-4 animate-pulse drop-shadow-[0_0_15px_rgba(59,130,246,0.6)]">🥚</div>
+                    <div className="text-6xl mb-4 animate-pulse drop-shadow-[0_0_20px_rgba(34,211,238,0.4)]">🥚</div>
                     {now < incubatingEgg.hatchTime ? (
                        <>
-                         <h4 className="text-blue-400 font-black tracking-widest uppercase mb-1">Chocando Ovo de Dados</h4>
-                         <p className="text-white font-mono text-xl bg-black/50 px-4 py-1 rounded border border-blue-800">
-                           {Math.ceil((incubatingEgg.hatchTime - now) / 1000)}s
-                         </p>
+                         <h4 className="text-cyan-400 font-bold tracking-widest uppercase mb-2 text-[11px]">Chocando Ovo de Dados</h4>
+                         <p className="text-cyan-100 font-mono text-xl bg-[#111827] px-6 py-2 rounded-md border border-[#1e293b] shadow-inner">{Math.ceil((incubatingEgg.hatchTime - now) / 1000)}s</p>
                        </>
                     ) : (
-                       <button onClick={hatchEgg} className="bg-blue-500 hover:bg-blue-400 text-white font-black px-6 py-2 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-bounce mt-2">
-                         Abrir Ovo Agora!
-                       </button>
+                       <button onClick={hatchEgg} className="bg-[#0f2933] border border-[#22d3ee] hover:bg-[#164e63] text-cyan-100 font-bold px-8 py-3 rounded-md uppercase tracking-widest shadow-[0_0_15px_rgba(34,211,238,0.2)] animate-pulse mt-2 transition-colors text-[10px]">Extrair Digimon!</button>
                     )}
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center text-slate-500 py-4 opacity-50">
-                    <span className="text-4xl mb-2 grayscale">🥚</span>
-                    <p className="text-xs uppercase font-bold">Incubadora Vazia</p>
-                  </div>
+                  <div className="flex flex-col items-center text-slate-600 py-4 opacity-50"><span className="text-5xl mb-2 grayscale">🥚</span><p className="text-[10px] uppercase font-bold tracking-widest">Slot Vazio</p></div>
                 )}
               </div>
 
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 gap-3">
                 {Object.keys(fragments).length === 0 ? (
-                  <div className="text-center p-8 border border-dashed border-slate-700 rounded-lg text-slate-500">Nenhum fragmento coletado ainda.</div>
+                  <div className="text-center p-8 border border-dashed border-[#1e293b] rounded-lg text-slate-500 text-[10px] uppercase tracking-widest">Nenhum fragmento extraído.</div>
                 ) : (
                   Object.entries(fragments).map(([id, amount]) => {
                     const progress = Math.min((amount / 50) * 100, 100);
@@ -209,95 +434,24 @@ export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogo
                     if (ownedDigimons.includes(id)) return null; 
 
                     return (
-                      <div key={id} className={`bg-slate-900 border ${isReady ? 'border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.2)]' : 'border-slate-800'} p-3 rounded-lg flex items-center gap-4`}>
-                        <MenuSprite visual={data} className={`w-12 h-12 bg-slate-950 rounded border ${isReady ? 'border-blue-400' : 'border-slate-700 grayscale'}`} />
+                      <div key={id} className={`bg-[#111827] border ${isReady ? 'border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.1)]' : 'border-[#1e293b]'} p-3 rounded-lg flex items-center gap-4 transition-colors`}>
+                        <div className={`w-12 h-12 bg-[#0a0f1a] rounded-full border flex items-center justify-center flex-shrink-0 shadow-inner ${isReady ? 'border-cyan-400' : 'border-[#1e293b] grayscale opacity-40'}`}>
+                           <img src={data.menuImg} className="w-8 h-8 object-contain" />
+                        </div>
+                        
                         <div className="flex-1">
-                          <h4 className="text-slate-200 font-bold uppercase tracking-wider mb-2">{data.name}</h4>
-                          <div className="w-full h-3 bg-slate-950 border border-slate-700 rounded-full overflow-hidden relative">
-                            <div className={`h-full transition-all ${isReady ? 'bg-blue-500' : 'bg-purple-600'}`} style={{ width: `${progress}%` }}></div>
-                            <span className="absolute inset-0 flex items-center justify-center text-[9px] font-mono font-bold text-white">{amount} / 50 Data</span>
+                          <h4 className="text-slate-200 font-bold uppercase tracking-widest mb-2 text-[11px]">{data.name}</h4>
+                          <div className="w-full h-3 bg-[#0a0f1a] border border-[#1e293b] rounded-full overflow-hidden relative shadow-inner">
+                            <div className={`h-full transition-all duration-300 ${isReady ? 'bg-cyan-500' : 'bg-slate-600'}`} style={{ width: `${progress}%` }}></div>
+                            <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold font-mono text-white drop-shadow-[0_1px_1px_black]">{amount}/50</span>
                           </div>
                         </div>
-                        <button 
-                          onClick={() => startIncubation(id)} 
-                          disabled={!isReady || incubatingEgg !== null} 
-                          className={`px-4 py-2 rounded text-xs font-bold uppercase transition-all ${(isReady && !incubatingEgg) ? 'bg-blue-500 text-white hover:bg-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700'}`}
-                        >
-                          Incubar
-                        </button>
+                        <button onClick={() => startIncubation(id)} disabled={!isReady || incubatingEgg !== null} className={`px-4 py-2 rounded-md text-[9px] font-bold uppercase tracking-widest transition-all border ${isReady && !incubatingEgg ? 'bg-[#0f2933] border-[#22d3ee] text-cyan-100 hover:bg-[#164e63] shadow-[0_0_10px_rgba(34,211,238,0.1)]' : 'bg-transparent border-[#334155] text-slate-600 cursor-not-allowed'}`}>Incubar</button>
                       </div>
                     );
                   })
                 )}
               </div>
-            </div>
-          )}
-
-          {activeModal === 'quests' && (
-            <div className="space-y-6">
-              <div>
-                <h4 className="text-xs font-bold text-digi-gold uppercase tracking-widest mb-3 border-b border-slate-800 pb-1">Missões Diárias</h4>
-                <div className="bg-slate-900 border border-digi-cyan/30 p-3 rounded flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-bold text-slate-200">Bater Cartão</p>
-                    <p className="text-[10px] text-slate-400">Faça login no jogo hoje.</p>
-                  </div>
-                  <button className="bg-digi-cyan text-slate-900 px-3 py-1 rounded text-[10px] font-bold uppercase">Resgatar</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeModal === 'digipedia' && (
-            <div className="grid grid-cols-4 gap-3">
-              {Object.entries(digimonDict).map(([id, data]) => {
-                const hasDigimon = ownedDigimons.includes(id);
-                return (
-                  <div key={id} className={`bg-slate-900 border ${hasDigimon ? 'border-digi-cyan/50' : 'border-slate-800'} rounded p-2 flex flex-col items-center justify-center gap-2 aspect-square`}>
-                    <MenuSprite visual={data} className={`w-12 h-12 p-1 ${hasDigimon ? '' : 'brightness-0 opacity-30'}`} />
-                    <span className={`text-[10px] font-bold uppercase ${hasDigimon ? 'text-slate-200' : 'text-slate-600'}`}>{hasDigimon ? data.name : '???'}</span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {activeModal === 'settings' && (
-            <div className="space-y-4">
-              <div className="bg-slate-900 border border-slate-800 p-4 rounded-lg space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-                  <div>
-                    <span className="text-sm font-bold text-slate-200 block uppercase">Efeitos Sonoros (SFX)</span>
-                    <span className="text-[10px] text-slate-500">Sons de combate e coleta de itens.</span>
-                  </div>
-                  <button onClick={toggleSound} className={`text-xs font-bold px-4 py-2 rounded uppercase transition-all ${soundEnabled ? 'bg-digi-cyan text-slate-900' : 'bg-slate-800 text-slate-500'}`}>
-                    {soundEnabled ? 'Ligado' : 'Desligado'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* NOVIDADE: Menu de Mapa com ícones independentes usando os rostinhos "init" */}
-          {activeModal === 'map' && (
-            <div className="h-full flex flex-col items-center justify-center relative overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-900/50 rounded-lg">
-              
-              <div className="flex gap-16 absolute top-1/2 -translate-y-1/2">
-                <button onClick={() => { setMapHunt('koromon', 'Koromon', 1, '/koromon-esq.png', 'Normal'); closeModal(); setCurrentZone('floresta'); }} className="group flex flex-col items-center transition-transform hover:-translate-y-2">
-                  <MenuSprite visual={{ menuImg: '/koromon-init.png', isSprite: true, menuFrames: 2 }} className="w-16 h-16 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] z-10" />
-                  <div className="bg-slate-950/90 border border-slate-700 px-3 py-1 rounded mt-2 text-center group-hover:border-digi-cyan transition-colors">
-                    <p className="text-[10px] font-bold text-white uppercase tracking-widest">Pradaria Koromon</p>
-                  </div>
-                </button>
-
-                <button onClick={() => { setMapHunt('agumon', 'Agumon', 20, '/agu-anima.png', 'Normal'); closeModal(); setCurrentZone('floresta'); }} className="group flex flex-col items-center transition-transform hover:-translate-y-2">
-                  <MenuSprite visual={{ menuImg: '/agumon-init.png', isSprite: true, menuFrames: 2 }} className="w-16 h-16 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] z-10" />
-                  <div className="bg-slate-950/90 border border-slate-700 px-3 py-1 rounded mt-2 text-center group-hover:border-digi-cyan transition-colors">
-                    <p className="text-[10px] font-bold text-white uppercase tracking-widest">Ninho Agumon</p>
-                  </div>
-                </button>
-              </div>
-
             </div>
           )}
 

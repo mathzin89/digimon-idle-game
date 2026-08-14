@@ -5,8 +5,10 @@ import { db } from '../services/firebase';
 
 interface DigimonStats { level: number; exp: number; maxExp: number; hp: number; maxHp: number; }
 interface MapTarget { instanceId: string; id: string; name: string; level: number; hp: number; maxHp: number; image: string; rarity: 'Normal' | 'Elite' | 'Chefe' | 'Divino'; x: number; y: number; }
-interface CaptureLogEntry { name: string; level: number; timestamp: string; }
+interface CaptureLogEntry { name: string; level: number; timestamp: string; rarity: string; }
 interface LootResult { exp: number; bits: number; item: string | null; leveledUp: boolean; }
+interface AutoHelperSettings { autoPotion: boolean; potionThreshold: number; autoScan: boolean; }
+interface HuntSessionStats { defeated: number; expGained: number; bitsGained: number; potionsUsed: number; scansUsed: number; timeStart: number; }
 
 interface GameState {
   tamerName: string;
@@ -32,12 +34,28 @@ interface GameState {
   equippedGear: string | null;
   incubatingEgg: { digimonId: string, hatchTime: number } | null;
 
+  autoHelper: AutoHelperSettings;
+  huntSession: HuntSessionStats;
+
+  // NOVIDADES: Game Pass State
+  bpp: number;
+  isPremium: boolean;
+  gamePassMissions: { id: string, targetId: string, desc: string, target: number, current: number, reward: number, claimed: boolean }[];
+
   toggleSound: () => void;
   equipGear: (gearId: string) => void;
   startIncubation: (id: string) => void;
   hatchEgg: () => void;
   sellFragmentForGems: (id: string, amount: number) => void;
   
+  updateAutoHelper: (settings: Partial<AutoHelperSettings>) => void;
+  resetHuntSession: () => void;
+  evolveDigimon: (id: string) => void;
+
+  // NOVIDADES: Game Pass Actions
+  claimMission: (id: string) => void;
+  buyPremium: () => void;
+
   setMapHunt: (id: string, name: string, level: number, image: string, rarity?: 'Normal' | 'Elite' | 'Chefe' | 'Divino') => void;
   spawnSingleTarget: () => void;
   attackMapTarget: (targetInstanceId: string, damage: number) => void;
@@ -46,10 +64,10 @@ interface GameState {
   synthesizeDigimon: (id: string) => void;
   setActiveDigimon: (id: string) => void;
   buyItem: (itemId: string, cost: number, currency: 'bits' | 'gems', amount: number) => void;
-  useItem: (itemId: string) => void;
+  useItem: (itemId: string, isAuto?: boolean) => void;
   equipOutfit: (outfitId: string) => void;
   buyOutfit: (outfitId: string, cost: number) => boolean;
-  addCaptureLog: (name: string, level: number) => void;
+  addCaptureLog: (name: string, level: number, rarity: string) => void;
   completeTutorial: (uid: string, gender: 'male' | 'female', starterId: string) => Promise<void>;
   loadProgress: (uid: string) => Promise<void>;
   saveProgress: (uid: string) => Promise<void>;
@@ -58,17 +76,48 @@ interface GameState {
 export const useGameStore = create<GameState>((set, get) => ({
   tamerName: 'Tamer', bits: 500, gems: 50, avatar: 'tai', equippedOutfit: 'default', ownedOutfits: ['default'],
   captureLog: [], mapTargets: [], currentHuntType: null, scanningTarget: null, fragments: {},
-  ownedDigimons: [], myDigimons: {}, activeDigimon: '', items: { meat: 5, scan: 2, potion: 3 },
+  ownedDigimons: [], myDigimons: {}, activeDigimon: '', items: { meat: 5, scan: 10, potion: 20 },
   isDataLoaded: false, hasCompletedTutorial: false,
   
-  soundEnabled: true,
-  ownedGear: [],
-  equippedGear: null,
-  incubatingEgg: null,
+  soundEnabled: true, ownedGear: [], equippedGear: null, incubatingEgg: null,
+
+  autoHelper: { autoPotion: false, potionThreshold: 50, autoScan: false },
+  huntSession: { defeated: 0, expGained: 0, bitsGained: 0, potionsUsed: 0, scansUsed: 0, timeStart: Date.now() },
+
+  bpp: 0,
+  isPremium: false,
+  gamePassMissions: [
+    { id: 'm1', targetId: 'koromon', desc: 'Derrote 50 Koromon', target: 50, current: 0, reward: 10, claimed: false },
+    { id: 'm2', targetId: 'agumon', desc: 'Derrote 50 Agumon', target: 50, current: 0, reward: 20, claimed: false },
+  ],
 
   toggleSound: () => set(state => ({ soundEnabled: !state.soundEnabled })),
   equipGear: (gearId) => set({ equippedGear: gearId === get().equippedGear ? null : gearId }),
-  
+  updateAutoHelper: (settings) => set(state => ({ autoHelper: { ...state.autoHelper, ...settings } })),
+  resetHuntSession: () => set({ huntSession: { defeated: 0, expGained: 0, bitsGained: 0, potionsUsed: 0, scansUsed: 0, timeStart: Date.now() } }),
+
+  evolveDigimon: (id) => { alert(`O ${id} evoluiu com sucesso!`); },
+
+  claimMission: (id) => {
+    const { gamePassMissions, bpp } = get();
+    const mission = gamePassMissions.find(m => m.id === id);
+    if (mission && mission.current >= mission.target && !mission.claimed) {
+      set({
+        bpp: bpp + mission.reward,
+        gamePassMissions: gamePassMissions.map(m => m.id === id ? { ...m, claimed: true } : m)
+      });
+    }
+  },
+
+  buyPremium: () => {
+    const { gems } = get();
+    if (gems >= 15 && !get().isPremium) {
+      set({ gems: gems - 15, isPremium: true });
+    } else {
+      alert('Gemas insuficientes!');
+    }
+  },
+
   startIncubation: (id) => {
     const { fragments, incubatingEgg } = get();
     if (!incubatingEgg && (fragments[id] || 0) >= 50) {
@@ -92,6 +141,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setMapHunt: (id, name, level, image, rarity = 'Normal') => {
+    get().resetHuntSession();
     set({ currentHuntType: { id, name, level, image, rarity }, mapTargets: [], scanningTarget: null });
     for (let i = 0; i < 4; i++) get().spawnSingleTarget();
   },
@@ -107,7 +157,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     let { id, name, image, level, rarity } = currentHuntType;
 
     if (rand > 0.98 && id === 'patamon') {
-       id = 'angemon'; name = 'Angemon'; image = 'https://wikimon.net/images/c/ce/Angemon_b_ds.gif'; level += 30; rarity = 'Divino';
+       id = 'angemon'; name = 'Angemon'; image = '/angemon.png'; level += 30; rarity = 'Divino';
     } else if (rand > 0.92) { rarity = 'Chefe'; level += 10; } 
     else if (rand > 0.80) { rarity = 'Elite'; level += 5; }
 
@@ -117,12 +167,18 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   attackMapTarget: (targetInstanceId, damage) => {
-    const { mapTargets } = get();
+    const { mapTargets, huntSession, gamePassMissions } = get();
     const updated = mapTargets.map(t => t.instanceId === targetInstanceId ? { ...t, hp: t.hp - damage } : t);
     const defeated = updated.find(t => t.instanceId === targetInstanceId && t.hp <= 0);
 
     if (defeated) {
-      set({ mapTargets: updated.filter(t => t.instanceId !== targetInstanceId), scanningTarget: defeated });
+      const newMissions = gamePassMissions.map(m => m.targetId === defeated.id && m.current < m.target ? { ...m, current: m.current + 1 } : m);
+      set({ 
+        mapTargets: updated.filter(t => t.instanceId !== targetInstanceId), 
+        scanningTarget: defeated,
+        huntSession: { ...huntSession, defeated: huntSession.defeated + 1 },
+        gamePassMissions: newMissions
+      });
       setTimeout(() => get().spawnSingleTarget(), 800);
     } else {
       set({ mapTargets: updated });
@@ -130,7 +186,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   takeDamage: (damage) => {
-    const { myDigimons, activeDigimon } = get();
+    const { myDigimons, activeDigimon, autoHelper, items, useItem } = get();
     const stats = myDigimons[activeDigimon];
     if (!stats) return false;
 
@@ -140,6 +196,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (newHp <= 0) {
       newHp = stats.maxHp; 
       isDead = true;
+    } else if (autoHelper.autoPotion && (newHp / stats.maxHp) * 100 <= autoHelper.potionThreshold) {
+      if (items.potion && items.potion > 0) {
+        newHp = Math.min(stats.maxHp, newHp + 100);
+        useItem('potion', true);
+      }
     }
 
     set({ myDigimons: { ...myDigimons, [activeDigimon]: { ...stats, hp: newHp } } });
@@ -147,8 +208,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   finishDNAScan: (target) => {
-    const { myDigimons, activeDigimon, addCaptureLog, items, ownedGear } = get();
-    addCaptureLog(target.name, target.level);
+    const { myDigimons, activeDigimon, addCaptureLog, items, ownedGear, huntSession, autoHelper, useItem } = get();
+    addCaptureLog(target.name, target.level, target.rarity);
     
     const currentStats = myDigimons[activeDigimon] || { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100 };
     
@@ -186,6 +247,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     const newItems = { ...items };
     if (droppedItem) newItems[droppedItem] = (newItems[droppedItem] || 0) + 1;
 
+    if (autoHelper.autoScan && newItems.scan > 0) {
+      useItem('scan', true);
+    }
+
     set((state) => ({
       bits: state.bits + earnedBits,
       items: newItems,
@@ -194,6 +259,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       myDigimons: { 
         ...state.myDigimons, 
         [activeDigimon]: { ...currentStats, level: newLevel, exp: finalExp, maxExp: newMaxExp, maxHp: newMaxHp, hp: leveledUp ? newMaxHp : currentStats.hp } 
+      },
+      huntSession: {
+        ...state.huntSession,
+        expGained: state.huntSession.expGained + earnedExp,
+        bitsGained: state.huntSession.bitsGained + earnedBits
       },
       scanningTarget: null
     }));
@@ -205,12 +275,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { fragments, ownedDigimons, myDigimons } = get();
     const count = fragments[id] || 0;
     if (count >= 50 && !ownedDigimons.includes(id)) {
-      set({
-        fragments: { ...fragments, [id]: count - 50 },
-        ownedDigimons: [...ownedDigimons, id],
-        myDigimons: { ...myDigimons, [id]: { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100 } },
-        activeDigimon: get().activeDigimon || id
-      });
+      set({ fragments: { ...fragments, [id]: count - 50 }, ownedDigimons: [...ownedDigimons, id], myDigimons: { ...myDigimons, [id]: { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100 } }, activeDigimon: get().activeDigimon || id });
     }
   },
 
@@ -222,8 +287,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     else if (currency === 'gems' && state.gems >= cost) set({ gems: state.gems - cost, items: { ...state.items, [itemId]: (state.items[itemId] || 0) + amount } });
   },
   
-  useItem: (itemId) => {
-    const { items, myDigimons, activeDigimon } = get();
+  useItem: (itemId, isAuto = false) => {
+    const { items, myDigimons, activeDigimon, huntSession } = get();
     if ((items[itemId] || 0) > 0) {
       const stats = myDigimons[activeDigimon];
       if (!stats) return;
@@ -232,11 +297,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (itemId === 'meat') heal = 30;
       if (itemId === 'potion') heal = 100;
 
+      const updatedSession = { ...huntSession };
+      if (isAuto && itemId === 'potion') updatedSession.potionsUsed += 1;
+      if (isAuto && itemId === 'scan') updatedSession.scansUsed += 1;
+
       if (heal > 0) {
         const newHp = Math.min(stats.maxHp, stats.hp + heal);
-        set({ items: { ...items, [itemId]: items[itemId] - 1 }, myDigimons: { ...myDigimons, [activeDigimon]: { ...stats, hp: newHp } } });
+        set({ items: { ...items, [itemId]: items[itemId] - 1 }, myDigimons: { ...myDigimons, [activeDigimon]: { ...stats, hp: newHp } }, huntSession: updatedSession });
       } else {
-        set({ items: { ...items, [itemId]: items[itemId] - 1 } });
+        set({ items: { ...items, [itemId]: items[itemId] - 1 }, huntSession: updatedSession });
       }
     }
   },
@@ -252,8 +321,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     return false;
   },
   
-  addCaptureLog: (name, level) => {
-    const newEntry = { name, level, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) };
+  addCaptureLog: (name, level, rarity) => {
+    const newEntry = { name, level, rarity, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) };
     set((state) => ({ captureLog: [newEntry, ...state.captureLog.slice(0, 49)] }));
   },
   
@@ -261,7 +330,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const newState = { avatar: gender === 'female' ? 'sora' : 'tai', hasCompletedTutorial: true, ownedDigimons: [starterId], activeDigimon: starterId, myDigimons: { [starterId]: { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100 } } };
     set(newState);
     get().setMapHunt('koromon', 'Koromon', 1, '/koromon-esq.png', 'Normal'); 
-    try { await setDoc(doc(db, 'users', uid), { ...newState, bits: get().bits, gems: get().gems, items: get().items, equippedOutfit: get().equippedOutfit, ownedOutfits: get().ownedOutfits, captureLog: get().captureLog, ownedGear: get().ownedGear, equippedGear: get().equippedGear, soundEnabled: get().soundEnabled }, { merge: true }); } catch (error) { console.error('Erro', error); }
+    try { await setDoc(doc(db, 'users', uid), { ...newState, bits: get().bits, gems: get().gems, items: get().items, equippedOutfit: get().equippedOutfit, ownedOutfits: get().ownedOutfits, captureLog: get().captureLog, ownedGear: get().ownedGear, equippedGear: get().equippedGear, soundEnabled: get().soundEnabled, bpp: get().bpp, isPremium: get().isPremium }, { merge: true }); } catch (error) { console.error('Erro', error); }
   },
   
   loadProgress: async (uid) => {
@@ -272,8 +341,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         set({
           bits: data.bits ?? 500, gems: data.gems ?? 50, avatar: data.avatar ?? 'tai', equippedOutfit: data.equippedOutfit ?? 'default', ownedOutfits: data.ownedOutfits ?? ['default'],
           captureLog: data.captureLog ?? [], fragments: data.fragments ?? {}, ownedDigimons: data.ownedDigimons ?? [], myDigimons: data.myDigimons ?? {}, activeDigimon: data.activeDigimon ?? '',
-          items: data.items ?? { meat: 5, scan: 2, potion: 3 }, hasCompletedTutorial: data.hasCompletedTutorial ?? false, ownedGear: data.ownedGear ?? [], equippedGear: data.equippedGear ?? null,
-          incubatingEgg: data.incubatingEgg ?? null, soundEnabled: data.soundEnabled ?? true, isDataLoaded: true
+          items: data.items ?? { meat: 5, scan: 10, potion: 20 }, hasCompletedTutorial: data.hasCompletedTutorial ?? false, ownedGear: data.ownedGear ?? [], equippedGear: data.equippedGear ?? null,
+          incubatingEgg: data.incubatingEgg ?? null, soundEnabled: data.soundEnabled ?? true, bpp: data.bpp ?? 0, isPremium: data.isPremium ?? false, isDataLoaded: true
         });
         
         if (data.hasCompletedTutorial && !get().currentHuntType) {
@@ -286,7 +355,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   saveProgress: async (uid) => {
     try {
       const state = get();
-      await setDoc(doc(db, 'users', uid), { bits: state.bits, gems: state.gems, avatar: state.avatar, equippedOutfit: state.equippedOutfit, ownedOutfits: state.ownedOutfits, captureLog: state.captureLog, fragments: state.fragments, ownedDigimons: state.ownedDigimons, myDigimons: state.myDigimons, activeDigimon: state.activeDigimon, items: state.items, hasCompletedTutorial: state.hasCompletedTutorial, ownedGear: state.ownedGear, equippedGear: state.equippedGear, incubatingEgg: state.incubatingEgg, soundEnabled: state.soundEnabled }, { merge: true });
+      await setDoc(doc(db, 'users', uid), { bits: state.bits, gems: state.gems, avatar: state.avatar, equippedOutfit: state.equippedOutfit, ownedOutfits: state.ownedOutfits, captureLog: state.captureLog, fragments: state.fragments, ownedDigimons: state.ownedDigimons, myDigimons: state.myDigimons, activeDigimon: state.activeDigimon, items: state.items, hasCompletedTutorial: state.hasCompletedTutorial, ownedGear: state.ownedGear, equippedGear: state.equippedGear, incubatingEgg: state.incubatingEgg, soundEnabled: state.soundEnabled, bpp: state.bpp, isPremium: state.isPremium }, { merge: true });
     } catch (error) { console.error('Erro', error); }
   }
 }));
