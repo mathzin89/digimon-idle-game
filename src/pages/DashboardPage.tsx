@@ -3,19 +3,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/useGameStore'; 
 import { useAuthStore } from '../store/useAuthStore';
-import { getDigimonVisuals, MenuSprite } from '../utils/digimonVisuals';
+import { getDigimonVisuals } from '../utils/digimonVisuals';
 import { GameWorld, ModalType } from '../components/game/GameWorld';
 import { GameModals } from '../components/game/GameModals';
-import { TamerPortrait } from '../components/ui/TamerPortrait'; // Certifique-se de importar!
+import { TamerPortrait } from '../components/ui/TamerPortrait';
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   
   const { 
-    tamerName, bits, gems, avatar, ownedDigimons, myDigimons, activeDigimon, items,
+    tamerName, bits, gems, bpp, avatar, ownedDigimons, myDigimons, activeDigimon, items,
     setActiveDigimon, useItem, saveProgress, loadProgress, isDataLoaded, hasCompletedTutorial, evolveDigimon,
-    huntSession
+    huntSession, role
   } = useGameStore();
   
   const [activeModal, setActiveModal] = useState<ModalType>(null);
@@ -27,9 +27,9 @@ export function DashboardPage() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const initialMessages = [
-    { time: '13:30', author: 'Dr_XDSF', level: 771, text: 'Golem lendario, 1.8, 131, 100KK listado' },
-    { time: '13:30', author: 'SebaSeeds', level: 805, text: 'Hola, como se llega a Outlands chicos ??' },
-    { time: '13:30', author: 'Chufli', level: 216, text: 'debes subir al nivel 150' },
+    { time: '13:30', author: 'Dr_XDSF', level: 771, role: 'player', text: 'Golem lendario, 1.8, 131, 100KK listado' },
+    { time: '13:30', author: 'SebaSeeds', level: 805, role: 'player', text: 'Hola, como se llega a Outlands chicos ??' },
+    { time: '13:30', author: 'Chufli', level: 216, role: 'player', text: 'debes subir al nivel 150' },
   ];
   const [chatMessages, setChatMessages] = useState(initialMessages);
 
@@ -40,6 +40,7 @@ export function DashboardPage() {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       author: user?.displayName || tamerName,
       level: myDigimons[activeDigimon]?.level || 1,
+      role: role,
       text: chatInput
     };
     setChatMessages(prev => [...prev, newMsg]);
@@ -83,26 +84,25 @@ export function DashboardPage() {
 
   const huntTimeMinutes = Math.floor((Date.now() - huntSession.timeStart) / 60000);
   const huntTimeHours = Math.floor(huntTimeMinutes / 60);
-  const tamerGender = (avatar === 'sora' || avatar === 'mimi') ? 'female' : 'male';
+  
+  const tamerLevel = Math.floor((bpp || 0) / 100) + 1;
+
+  const getChatTag = (tagRole?: string) => {
+    switch (tagRole) {
+      case 'owner': return <span className="text-red-500 font-black mr-1 drop-shadow-md">[OWNER]</span>;
+      case 'admin': return <span className="text-cyan-400 font-black mr-1 drop-shadow-md">[ADM]</span>;
+      case 'mod': return <span className="text-emerald-400 font-black mr-1 drop-shadow-md">[MOD]</span>;
+      case 'vip': return <span className="text-purple-400 font-black mr-1 drop-shadow-md">[VIP]</span>;
+      default: return null;
+    }
+  };
 
   return (
     <div className="min-h-screen relative w-full h-screen overflow-hidden bg-[#000] font-sans selection:bg-cyan-500/30">
       
       <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes floatDamage { 0% { transform: translateY(0) scale(0.5); opacity: 0; } 20% { transform: translateY(-15px) scale(1.2); opacity: 1; } 100% { transform: translateY(-40px) scale(1); opacity: 0; } }
-        @keyframes floatCrit { 0% { transform: translateY(0) scale(0.5); opacity: 0; } 15% { transform: translateY(-10px) scale(1.8); opacity: 1; filter: brightness(1.5); } 100% { transform: translateY(-45px) scale(1.2); opacity: 0; } }
-        @keyframes floatLoot { 0% { transform: translateY(0) scale(0.5); opacity: 0; } 20% { transform: translateY(-20px) scale(1.1); opacity: 1; } 80% { transform: translateY(-40px) scale(1); opacity: 1; } 100% { transform: translateY(-50px) scale(0.8); opacity: 0; } }
         @keyframes monsterHit { 0%, 100% { filter: brightness(1) sepia(0); transform: translateX(0); } 25% { filter: brightness(1.5) sepia(1) hue-rotate(-50deg) saturate(5); transform: translateX(-3px); } 75% { filter: brightness(1.5) sepia(1) hue-rotate(-50deg) saturate(5); transform: translateX(3px); } }
         .hit-anim { animation: monsterHit 0.3s ease-out; }
-        @keyframes suckIntoDigivice { 0% { transform: scale(1) translateY(0) rotate(0deg); opacity: 1; filter: brightness(1) drop-shadow(0 0 0px cyan); } 25% { transform: scale(0.9) translateY(-30px) rotate(0deg); opacity: 1; filter: brightness(1.5) drop-shadow(0 0 10px cyan); } 60% { transform: scale(0.4) translateY(-30px) rotate(180deg); opacity: 0.8; filter: brightness(2) drop-shadow(0 0 20px cyan); } 100% { transform: scale(0) translateY(60px) rotate(360deg); opacity: 0; filter: brightness(3); } }
-        @keyframes pulseDNA { from { width: 8px; opacity: 0.6; } to { width: 14px; opacity: 1; } }
-        @keyframes fadeOut { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
-        @keyframes digivicePulse { 0%, 100% { opacity: 0.5; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2) drop-shadow(0 0 10px cyan); } }
-        @keyframes attackThrust { 0%, 100% { transform: translate(-50%, -50%); } 50% { transform: translate(calc(-50% + 4px), -50%); } }
-        .attacking-bump { animation: attackThrust 0.3s ease-in-out infinite alternate; }
-        .aura-elite { filter: drop-shadow(0 0 8px #3b82f6); }
-        .aura-chefe { filter: drop-shadow(0 0 12px #ef4444) brightness(1.2); }
-        .aura-divino { filter: drop-shadow(0 0 20px #fbbf24) brightness(1.4); }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
@@ -111,31 +111,46 @@ export function DashboardPage() {
 
       <GameWorld currentZone={currentZone} setActiveModal={setActiveModal} setCurrentZone={setCurrentZone} />
 
+      {/* WALLET / MOEDAS NO CANTO SUPERIOR DIREITO */}
+      <div className="absolute top-4 right-4 z-50 flex items-center gap-3 pointer-events-auto">
+        <div className="bg-[#0f121a]/90 backdrop-blur-md border border-yellow-500/30 px-3 py-1.5 rounded-full flex items-center gap-2 shadow-[0_4px_10px_rgba(0,0,0,0.5)] cursor-pointer hover:scale-105 transition-transform" title="Bits">
+          <span className="text-yellow-500 text-sm drop-shadow-md leading-none">🪙</span>
+          <span className="text-yellow-400 font-mono font-black text-[11px] mt-0.5">{bits?.toLocaleString() || 0}</span>
+        </div>
+        <div className="bg-[#0f121a]/90 backdrop-blur-md border border-cyan-500/30 px-3 py-1.5 rounded-full flex items-center gap-2 shadow-[0_4px_10px_rgba(0,0,0,0.5)] cursor-pointer hover:scale-105 transition-transform" title="Gemas">
+          <span className="text-cyan-400 text-sm drop-shadow-md leading-none">💎</span>
+          <span className="text-cyan-300 font-mono font-black text-[11px] mt-0.5">{gems?.toLocaleString() || 0}</span>
+        </div>
+        <div className="bg-[#0f121a]/90 backdrop-blur-md border border-purple-500/30 px-3 py-1.5 rounded-full flex items-center gap-2 shadow-[0_4px_10px_rgba(0,0,0,0.5)] cursor-pointer hover:scale-105 transition-transform" title="Battle Pass Points (Estrelas)">
+          <span className="text-purple-400 text-sm drop-shadow-md leading-none">⭐</span>
+          <span className="text-purple-300 font-mono font-black text-[11px] mt-0.5">{bpp?.toLocaleString() || 0}</span>
+        </div>
+      </div>
+
       {/* TOP MENU BAR COMPACTA */}
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 bg-[#0f121a]/95 border border-[#1e293b] rounded-full px-3 py-1.5 flex items-center gap-3 shadow-[0_4px_15px_rgba(0,0,0,0.8)] backdrop-blur-md">
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 bg-[#0f121a]/95 border border-[#1e293b] rounded-full px-4 py-2 flex items-center gap-3 shadow-[0_4px_15px_rgba(0,0,0,0.8)] backdrop-blur-md">
         
-        <button 
-          onClick={() => setCurrentZone(prev => prev === 'floresta' ? 'cidade' : 'floresta')} 
-          className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-1.5 hover:text-white transition-colors bg-[#141824] px-4 py-1.5 rounded-full border border-[#2d3748]"
-        >
-          <span className="text-[13px] leading-none drop-shadow-md">{currentZone === 'floresta' ? '🏰' : '🌲'}</span>
-          {currentZone === 'floresta' ? 'BASE' : 'CAÇAR'}
-        </button>
-
-        <div className="w-px h-5 bg-[#2d3748] mx-1"></div>
-
         <div className="flex items-center gap-4 px-1">
           <button onClick={() => setActiveModal('profile')} className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black]" title="Perfil">👤</button>
           <button onClick={() => setActiveModal('inventory')} className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black]" title="Mochila">🎒</button>
           <button onClick={() => setActiveModal('pc')} className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black]" title="Digi-Bank">💻</button>
           <button onClick={() => setActiveModal('map')} className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black]" title="Mapa">🗺️</button>
+          
+          {currentZone !== 'cidade' && (
+            <button 
+              onClick={() => setCurrentZone('cidade')} 
+              className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black] ml-1 border-l border-[#2d3748] pl-5" 
+              title="Voltar para a Base"
+            >
+              🏠
+            </button>
+          )}
         </div>
         
         <div className="w-px h-5 bg-[#2d3748] mx-1"></div>
 
         <div className="flex items-center gap-4 px-1">
           <button onClick={() => setActiveModal('quests')} className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black]" title="Analyzer">📊</button>
-          {/* Mercado Oculto se não estiver na cidade */}
           {currentZone === 'cidade' && (
             <button onClick={() => setActiveModal('shop')} className="text-sm hover:scale-125 transition-transform drop-shadow-[0_1px_2px_black]" title="Mercado">🛒</button>
           )}
@@ -149,12 +164,11 @@ export function DashboardPage() {
         
         <div className="p-3 border-b border-[#1e293b] flex items-center gap-3">
           <div className="w-[38px] h-[38px] bg-[#000] rounded-full border border-yellow-500 flex items-center justify-center overflow-hidden shadow-inner relative">
-             {/* AQUI ESTÁ A CORREÇÃO: TamerPortrait com zoom certinho */}
              <TamerPortrait gender={avatar} />
           </div>
           <div className="flex flex-col justify-center">
             <h2 className="font-bold text-[#facc15] text-[12px] tracking-wider uppercase leading-none drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">{user?.displayName || tamerName}</h2>
-            <p className="text-[9px] text-slate-400 mt-1">Nível 401 • {getDigimonVisuals(activeDigimon, myDigimons[activeDigimon]?.level || 1, true).name}</p>
+            <p className="text-[9px] text-slate-400 mt-1">Tamer Nv. {tamerLevel} • {getDigimonVisuals(activeDigimon, myDigimons[activeDigimon]?.level || 1, true).name}</p>
           </div>
         </div>
 
@@ -169,14 +183,13 @@ export function DashboardPage() {
              return (
                <div key={id} onClick={() => setActiveDigimon(id)} className={`bg-[#141824] rounded-lg p-2.5 flex gap-3 cursor-pointer transition-all border shadow-md ${isActive ? 'border-[#facc15]' : 'border-[#2d3748]'}`}>
                  
-                 {/* AVATAR COM ZOOM PERFEITO PRA MOSTRAR SÓ 1 KOROMON */}
                  <div className={`w-[42px] h-[42px] bg-[#000] rounded-full border-2 flex items-center justify-center flex-shrink-0 relative overflow-hidden ${isActive ? 'border-[#facc15]' : 'border-[#2d3748]'}`}>
                     <div 
                       className="pixelated absolute inset-0"
                       style={{
                         backgroundImage: `url('${visual.menuImg}')`,
-                        backgroundSize: '300% 100%', // Corta a spritesheet de 3 frames
-                        backgroundPosition: '0% 0%', // Pega só o primeiro frame
+                        backgroundSize: '300% 100%', 
+                        backgroundPosition: '0% 0%', 
                         imageRendering: 'pixelated'
                       }}
                     />
@@ -222,7 +235,9 @@ export function DashboardPage() {
           {chatMessages.map((msg, i) => (
             <div key={i} className="text-[10px] leading-tight">
               <span className="text-[#a38035] text-[9px] mr-1">{msg.time}</span>
-              <span className="text-[#38bdf8] font-bold mr-1">[{msg.level}] {msg.author}:</span>
+              <span className="text-[#38bdf8] font-bold mr-1">
+                {getChatTag(msg.role)}[{msg.level}] {msg.author}:
+              </span>
               <span className="text-white drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">{msg.text}</span>
             </div>
           ))}

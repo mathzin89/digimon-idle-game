@@ -15,7 +15,8 @@ export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogo
     ownedDigimons, buyItem, startIncubation, hatchEgg, incubatingEgg, 
     setMapHunt, equipOutfit, soundEnabled, toggleSound, ownedGear, equippedGear, equipGear, sellFragmentForGems, myDigimons, useItem,
     autoHelper, updateAutoHelper, huntSession,
-    bpp, isPremium, gamePassMissions, buyPremium, claimMission 
+    bpp, isPremium, gamePassMissions, buyPremium, claimMission,
+    activeDigimon, serverMaps, changeMap, storeItems // <- LENDO DO CMS
   } = useGameStore();
 
   const [profileTab, setProfileTab] = useState<'main' | 'gear' | 'outfits'>('main');
@@ -30,88 +31,108 @@ export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogo
     }
   }, [activeModal, incubatingEgg]);
 
-  // MAPA MUNDI GLOBAL
   if (activeModal === 'map') {
+    const mapsList = Object.values(serverMaps || {});
+    const myLevel = myDigimons[activeDigimon]?.level || 1;
+
     return (
       <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm pointer-events-auto">
         <div className="bg-[#0a0f1a] border border-[#1e293b] w-[90vw] h-[90vh] rounded-lg shadow-2xl flex flex-col overflow-hidden font-sans">
            <div className="bg-[#111827] border-b border-[#1e293b] p-3 flex justify-between items-center">
-              <h3 className="text-[#e2c779] font-bold tracking-widest uppercase flex items-center gap-2 text-xs">🗺️ Mapa • Digital World</h3>
+              <h3 className="text-[#e2c779] font-bold tracking-widest uppercase flex items-center gap-2 text-xs">🗺️ Seleção de Zona</h3>
               <div className="flex gap-2">
                 <button onClick={closeModal} className="text-slate-400 hover:text-white px-2 py-0.5 border border-[#1e293b] rounded bg-[#0a0f1a] ml-2 font-bold">✖</button>
               </div>
            </div>
-           <div className="flex bg-[#0a0f1a] border-b border-[#1e293b] px-4 pt-3 gap-2">
-             <button className="px-4 py-2 bg-[#111827] border-t border-l border-r border-[#1e293b] text-[#e2c779] font-bold text-[10px] rounded-t-lg">ILHA ARQUIVO</button>
-             <button className="px-4 py-2 bg-[#0a0f1a] text-slate-500 font-bold text-[10px] flex flex-col items-center leading-tight">CONTINENTE SERVER <span className="text-[8px] font-normal">Indisponível</span></button>
-           </div>
-           <div className="flex-1 relative bg-[#3b5b82] overflow-hidden">
-              <div className="absolute top-[10%] left-[15%] w-[30%] h-[40%] bg-[#5b8c5a] rounded-[100px] blur-md opacity-80"></div>
-              <div className="absolute bottom-[20%] right-[10%] w-[40%] h-[30%] bg-[#5b8c5a] rounded-[100px] blur-md opacity-80"></div>
-              <div className="absolute top-[50%] left-[45%] w-[20%] h-[20%] bg-[#c2b280] rounded-[50px] blur-md opacity-80"></div>
+           
+           <div className="flex-1 p-6 bg-[#050811] overflow-y-auto custom-scrollbar">
+             {mapsList.length === 0 ? (
+               <div className="flex flex-col items-center justify-center h-full opacity-50">
+                 <span className="text-4xl mb-4 grayscale">🗺️</span>
+                 <p className="text-white font-bold uppercase tracking-widest text-sm">Nenhuma zona mapeada</p>
+                 <p className="text-slate-400 text-[10px] uppercase tracking-widest mt-1">Crie um mapa no Admin.Sys</p>
+               </div>
+             ) : (
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                 {mapsList.map(map => {
+                   const canEnter = myLevel >= map.minLevel;
+                   return (
+                     <div 
+                       key={map.id} 
+                       onClick={() => {
+                         if (canEnter) {
+                           changeMap(map.id);
+                           closeModal();
+                           setCurrentZone('floresta'); 
+                         }
+                       }}
+                       className={`relative rounded-xl border overflow-hidden group transition-all ${canEnter ? 'border-[#1e293b] hover:border-cyan-400 cursor-pointer shadow-lg hover:shadow-[0_0_15px_rgba(34,211,238,0.2)]' : 'border-[#1e293b] opacity-50 cursor-not-allowed'}`}
+                     >
+                       <div className="h-32 bg-cover bg-center transition-transform duration-500 group-hover:scale-110" style={{ backgroundImage: `url('${map.bgImage || '/map-bg.png'}')` }} />
+                       <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1a] via-[#0a0f1a]/90 to-[#0a0f1a]/20" />
+                       
+                       <div className="absolute bottom-0 left-0 right-0 p-4">
+                         <h4 className="text-white font-black uppercase tracking-widest text-sm drop-shadow-md mb-3">{map.name}</h4>
+                         <div className="flex flex-col gap-2">
+                           <div className="flex items-center justify-between">
+                             <span className={`text-[9px] font-bold px-2 py-1 rounded uppercase tracking-widest ${canEnter ? 'bg-green-900/30 text-green-400 border border-green-500/30' : 'bg-red-900/30 text-red-400 border border-red-500/30'}`}>
+                               {canEnter ? 'Acesso Liberado' : `Requer Nv. ${map.minLevel}`}
+                             </span>
+                           </div>
+                           <div className="flex flex-wrap gap-1.5 mt-1">
+                             <span className="text-[8px] text-slate-500 uppercase tracking-widest w-full mb-0.5">Habitantes:</span>
+                             {map.spawns.split(',').map((s, i) => s.trim() && (
+                               <span key={i} className="bg-[#111827] border border-[#1e293b] text-cyan-400 text-[8px] px-1.5 py-0.5 rounded font-mono shadow-sm">
+                                  {s.trim()}
+                               </span>
+                             ))}
+                           </div>
+                         </div>
+                       </div>
 
-              <button onClick={() => { setMapHunt('koromon', 'Koromon', 1, '/koromon-esq.png', 'Normal'); closeModal(); setCurrentZone('floresta'); }} className="absolute top-[25%] left-[25%] flex flex-col items-center group transform -translate-x-1/2 -translate-y-1/2 hover:scale-110 transition-transform">
-                <div className="w-[42px] h-[42px] bg-[#111827] rounded-full border-2 border-[#eab308] flex items-center justify-center relative overflow-hidden shadow-lg group-hover:border-white">
-                   <img src="/koromon-init.png" className="w-8 h-8 object-contain relative z-10 drop-shadow-[0_2px_2px_black]" />
-                </div>
-                <div className="mt-1 text-center font-sans">
-                   <p className="text-[10px] font-bold text-white uppercase drop-shadow-[0_1px_1px_black]">Koromon</p>
-                   <p className="text-[9px] text-[#4ade80] font-bold drop-shadow-[0_1px_1px_black]">Nv 1</p>
-                </div>
-              </button>
-
-              <button onClick={() => { setMapHunt('agumon', 'Agumon', 20, '/agu-anima.png', 'Normal'); closeModal(); setCurrentZone('floresta'); }} className="absolute top-[55%] left-[50%] flex flex-col items-center group transform -translate-x-1/2 -translate-y-1/2 hover:scale-110 transition-transform">
-                <div className="w-[42px] h-[42px] bg-[#111827] rounded-full border-2 border-[#eab308] flex items-center justify-center relative overflow-hidden shadow-lg group-hover:border-white">
-                   <img src="/agumon-init.png" className="w-8 h-8 object-contain relative z-10 drop-shadow-[0_2px_2px_black]" />
-                </div>
-                <div className="mt-1 text-center font-sans">
-                   <p className="text-[10px] font-bold text-white uppercase drop-shadow-[0_1px_1px_black]">Agumon</p>
-                   <p className="text-[9px] text-[#4ade80] font-bold drop-shadow-[0_1px_1px_black]">Nv 20</p>
-                </div>
-              </button>
+                       {!canEnter && (
+                         <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-[2px]">
+                           <span className="text-red-500 text-4xl drop-shadow-[0_0_15px_black]">🔒</span>
+                         </div>
+                       )}
+                     </div>
+                   )
+                 })}
+               </div>
+             )}
            </div>
         </div>
       </div>
     );
   }
 
-  // GAME PASS
   if (activeModal === 'gamepass') {
     return (
       <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm pointer-events-auto">
         <div className="bg-[#0a0f1a] border border-[#1e293b] w-[600px] max-h-[85vh] rounded-lg shadow-2xl flex flex-col overflow-hidden font-sans">
-          
           <div className="flex justify-between items-center px-4 py-3 bg-[#111827] border-b border-[#1e293b]">
-             <h3 className="text-white font-bold tracking-widest uppercase flex items-center gap-2 text-[12px]">
-               🏅 Game Pass
-             </h3>
+             <h3 className="text-white font-bold tracking-widest uppercase flex items-center gap-2 text-[12px]">🏅 Game Pass</h3>
              <div className="flex items-center gap-4">
-               <div className="bg-[#eab308]/20 border border-[#eab308]/50 text-[#facc15] px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-[inset_0_0_10px_rgba(234,179,8,0.2)]">
-                 ⭐ {bpp} BPP
-               </div>
+               <div className="bg-[#eab308]/20 border border-[#eab308]/50 text-[#facc15] px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-[inset_0_0_10px_rgba(234,179,8,0.2)]">⭐ {bpp} BPP</div>
                <button onClick={closeModal} className="text-slate-500 hover:text-red-500 transition-colors font-bold text-lg leading-none">✖</button>
              </div>
           </div>
-
           <div className="px-4 py-4 border-b border-[#1e293b]">
              <button onClick={buyPremium} disabled={isPremium} className={`w-full font-bold py-3 rounded-lg flex items-center justify-center gap-2 text-[11px] shadow-lg transition-colors uppercase tracking-widest ${isPremium ? 'bg-green-600/20 text-green-400 border border-green-500/50 cursor-not-allowed' : 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white'}`}>
                 {isPremium ? '👑 Premium Desbloqueado' : '👑 Desbloquear o Premium - 💎 15'}
              </button>
           </div>
-
           <div className="px-4 py-3 border-b border-[#1e293b]">
              <h4 className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mb-3">Trilha de Recompensas</h4>
              <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
                {[1, 2, 3, 4, 5, 6, 7, 8].map(tier => (
                   <div key={tier} className="flex flex-col gap-1.5 min-w-[55px]">
                      <div className="text-center text-[10px] font-bold text-slate-300">T{tier}</div>
-                     
                      <div className={`border rounded p-1.5 flex flex-col items-center justify-center relative h-[55px] ${bpp >= tier * 10 ? 'bg-green-900/20 border-green-500/30' : 'bg-[#111827] border-[#1e293b]'}`}>
                         <span className="text-lg drop-shadow-md">🍖</span>
                         <span className="text-[8px] font-bold text-slate-400 mt-0.5">x{tier * 10}</span>
                         {bpp >= tier * 10 && <span className="absolute top-0.5 right-0.5 text-green-400 text-[10px] drop-shadow-[0_0_2px_black]">✓</span>}
                      </div>
-                     
                      <div className={`border rounded p-1.5 flex flex-col items-center justify-center relative h-[55px] ${isPremium && bpp >= tier * 10 ? 'bg-blue-900/20 border-blue-500/30' : 'bg-[#111827] border-[#1e293b]'}`}>
                         <span className="text-lg drop-shadow-md">💎</span>
                         <span className="text-[8px] font-bold text-slate-400 mt-0.5">x{tier * 2}</span>
@@ -122,7 +143,6 @@ export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogo
                ))}
              </div>
           </div>
-
           <div className="px-4 py-3 flex-1 overflow-y-auto custom-scrollbar">
              <h4 className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mb-3">Missões (Ganhe BPP)</h4>
              <div className="space-y-2">
@@ -152,18 +172,15 @@ export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogo
                })}
              </div>
           </div>
-
         </div>
       </div>
     );
   }
 
-  // MODAIS PADRÃO
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto">
       <div className="bg-[#0a0f1a] border border-[#1e293b] w-[600px] max-h-[85vh] rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden font-sans relative">
         
-        {/* HEADER */}
         <div className="p-4 flex justify-between items-center border-b border-[#1e293b] relative bg-[#0a0f1a]">
           <div className="absolute left-0 top-0 bottom-0 w-1 bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"></div>
           <h3 className="text-cyan-400 font-bold tracking-widest uppercase flex items-center gap-2 text-[11px] ml-2">
@@ -179,7 +196,7 @@ export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogo
         
         <div className="p-5 overflow-y-auto custom-scrollbar">
 
-          {/* NOVA MOCHILA (INVENTORY) */}
+          {/* MOCHILA (INVENTORY) */}
           {activeModal === 'inventory' && (
             <div className="space-y-4">
                <div className="bg-[#111827] border border-[#1e293b] p-3 rounded-lg text-center shadow-sm mb-4">
@@ -280,8 +297,6 @@ export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogo
               </div>
 
               <div className="bg-[#111827] border border-[#1e293b] rounded-lg overflow-hidden p-4 space-y-6">
-                
-                {/* Modulo Auto-Potion */}
                 <div className="border-b border-[#1e293b] pb-5">
                   <div className="flex items-center gap-3 mb-4">
                     <input type="checkbox" checked={autoHelper.autoPotion} onChange={(e) => updateAutoHelper({ autoPotion: e.target.checked })} className="w-4 h-4 accent-cyan-400 cursor-pointer" />
@@ -298,7 +313,6 @@ export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogo
                   </div>
                 </div>
 
-                {/* Modulo Auto-Scan */}
                 <div>
                   <div className="flex items-center gap-3 mb-4">
                     <input type="checkbox" checked={autoHelper.autoScan} onChange={(e) => updateAutoHelper({ autoScan: e.target.checked })} className="w-4 h-4 accent-cyan-400 cursor-pointer" />
@@ -311,7 +325,6 @@ export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogo
                      </div>
                   </div>
                 </div>
-
               </div>
             </div>
           )}
@@ -353,22 +366,26 @@ export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogo
                  <button onClick={() => setShopTab('local')} className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${shopTab === 'local' ? 'bg-[#111827] border border-[#1e293b] text-cyan-400' : 'border border-transparent text-slate-500 hover:text-slate-300'}`}>🛒 NPC Local</button>
                  <button onClick={() => setShopTab('online')} className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${shopTab === 'online' ? 'bg-[#111827] border border-[#1e293b] text-cyan-400' : 'border border-transparent text-slate-500 hover:text-slate-300'}`}>🤝 Player Trade</button>
                </div>
+               
+               {/* INTEGRAÇÃO DA LOJA LOCAL COM O CMS */}
                {shopTab === 'local' ? (
                  <div className="grid grid-cols-2 gap-4">
-                    <button onClick={() => buyItem('meat', 1000, 'bits', 10)} className="bg-[#111827] border border-[#1e293b] p-4 rounded-lg flex justify-between items-center hover:border-[#334155] transition-all shadow-[inset_0_0_10px_rgba(0,0,0,0.2)]">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl drop-shadow-md">🍖</span> 
-                        <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Carne x10</span>
-                      </div>
-                      <span className="text-yellow-400 text-[10px] font-bold font-mono tracking-widest">1.000 Bits</span>
-                    </button>
-                    <button onClick={() => buyItem('potion', 2500, 'bits', 5)} className="bg-[#111827] border border-[#1e293b] p-4 rounded-lg flex justify-between items-center hover:border-[#334155] transition-all shadow-[inset_0_0_10px_rgba(0,0,0,0.2)]">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl drop-shadow-md">💊</span> 
-                        <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Poção x5</span>
-                      </div>
-                      <span className="text-yellow-400 text-[10px] font-bold font-mono tracking-widest">2.500 Bits</span>
-                    </button>
+                    {storeItems?.length === 0 ? (
+                      <div className="col-span-2 text-center p-8 border border-dashed border-[#1e293b] rounded-lg text-slate-500 text-[10px] uppercase tracking-widest">Mercado vazio.</div>
+                    ) : (
+                      storeItems?.map(item => (
+                        <button key={item.id} onClick={() => buyItem(item.id, item.price, item.currency, 1)} className="bg-[#111827] border border-[#1e293b] p-4 rounded-lg flex justify-between items-center hover:border-[#334155] transition-all shadow-[inset_0_0_10px_rgba(0,0,0,0.2)] text-left">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl drop-shadow-md">{item.icon}</span> 
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">{item.name}</span>
+                              <span className="text-[8px] text-green-400 font-mono mt-0.5">+{item.effectValue} {item.type}</span>
+                            </div>
+                          </div>
+                          <span className="text-yellow-400 text-[10px] font-bold font-mono tracking-widest">{item.price} {item.currency === 'bits' ? '🪙' : '💎'}</span>
+                        </button>
+                      ))
+                    )}
                  </div>
                ) : (
                  <div className="space-y-4">

@@ -1,6 +1,6 @@
 // src/store/useGameStore.ts
 import { create } from 'zustand';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 interface DigimonStats { level: number; exp: number; maxExp: number; hp: number; maxHp: number; }
@@ -9,6 +9,11 @@ interface CaptureLogEntry { name: string; level: number; timestamp: string; rari
 interface LootResult { exp: number; bits: number; item: string | null; leveledUp: boolean; }
 interface AutoHelperSettings { autoPotion: boolean; potionThreshold: number; autoScan: boolean; }
 interface HuntSessionStats { defeated: number; expGained: number; bitsGained: number; potionsUsed: number; scansUsed: number; timeStart: number; }
+
+// Novas Interfaces do CMS
+interface ServerDigimon { id: string; name: string; hp: number; atk: number; evolvesTo: string; evolveLevel: number; rarity: string; menuImg: string; }
+interface ServerMap { id: string; name: string; bgImage: string; minLevel: number; spawns: string; }
+interface ServerSettings { globalExpMultiplier: number; globalDropMultiplier: number; isEventActive: boolean; rngRates: { normal: number; elite: number; chefe: number; divino: number }; }
 
 interface GameState {
   tamerName: string;
@@ -37,10 +42,21 @@ interface GameState {
   autoHelper: AutoHelperSettings;
   huntSession: HuntSessionStats;
 
-  // NOVIDADES: Game Pass State
   bpp: number;
   isPremium: boolean;
   gamePassMissions: { id: string, targetId: string, desc: string, target: number, current: number, reward: number, claimed: boolean }[];
+
+  // INTEGRAÇÃO CMS
+  serverDigimons: Record<string, ServerDigimon>;
+  serverMaps: Record<string, ServerMap>;
+  activeMapId: string | null;
+  role: string;
+  serverSettings: ServerSettings;
+  storeItems: any[];
+
+  fetchServerData: () => Promise<void>;
+  initServerData: () => void;
+  changeMap: (mapId: string) => void;
 
   toggleSound: () => void;
   equipGear: (gearId: string) => void;
@@ -52,7 +68,6 @@ interface GameState {
   resetHuntSession: () => void;
   evolveDigimon: (id: string) => void;
 
-  // NOVIDADES: Game Pass Actions
   claimMission: (id: string) => void;
   buyPremium: () => void;
 
@@ -80,16 +95,51 @@ export const useGameStore = create<GameState>((set, get) => ({
   isDataLoaded: false, hasCompletedTutorial: false,
   
   soundEnabled: true, ownedGear: [], equippedGear: null, incubatingEgg: null,
-
   autoHelper: { autoPotion: false, potionThreshold: 50, autoScan: false },
   huntSession: { defeated: 0, expGained: 0, bitsGained: 0, potionsUsed: 0, scansUsed: 0, timeStart: Date.now() },
 
-  bpp: 0,
-  isPremium: false,
+  bpp: 0, isPremium: false,
   gamePassMissions: [
     { id: 'm1', targetId: 'koromon', desc: 'Derrote 50 Koromon', target: 50, current: 0, reward: 10, claimed: false },
     { id: 'm2', targetId: 'agumon', desc: 'Derrote 50 Agumon', target: 50, current: 0, reward: 20, claimed: false },
   ],
+
+  // CMS STATES
+  serverDigimons: {},
+  serverMaps: {},
+  activeMapId: null,
+  role: 'player',
+  serverSettings: { globalExpMultiplier: 1, globalDropMultiplier: 1, isEventActive: false, rngRates: { normal: 70, elite: 20, chefe: 8, divino: 2 } },
+  storeItems: [],
+
+  fetchServerData: async () => {
+    try {
+      const digimonsSnap = await getDocs(collection(db, 'digimons'));
+      const sDigis: Record<string, ServerDigimon> = {};
+      digimonsSnap.forEach(d => { sDigis[d.id] = d.data() as ServerDigimon; });
+
+      const mapsSnap = await getDocs(collection(db, 'maps'));
+      const sMaps: Record<string, ServerMap> = {};
+      mapsSnap.forEach(d => { sMaps[d.id] = d.data() as ServerMap; });
+
+      set({ serverDigimons: sDigis, serverMaps: sMaps });
+    } catch (e) { console.error("Erro ao puxar dados do CMS:", e); }
+  },
+
+  initServerData: () => {
+    onSnapshot(doc(db, 'server', 'settings'), (docSnap) => {
+      if (docSnap.exists()) set({ serverSettings: docSnap.data() as ServerSettings });
+    });
+    getDocs(collection(db, 'items')).then((snap) => {
+      set({ storeItems: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+    });
+  },
+
+  changeMap: (mapId: string) => {
+    get().resetHuntSession();
+    set({ activeMapId: mapId, mapTargets: [], scanningTarget: null, currentHuntType: null });
+    for (let i = 0; i < 4; i++) get().spawnSingleTarget();
+  },
 
   toggleSound: () => set(state => ({ soundEnabled: !state.soundEnabled })),
   equipGear: (gearId) => set({ equippedGear: gearId === get().equippedGear ? null : gearId }),
@@ -102,20 +152,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { gamePassMissions, bpp } = get();
     const mission = gamePassMissions.find(m => m.id === id);
     if (mission && mission.current >= mission.target && !mission.claimed) {
-      set({
-        bpp: bpp + mission.reward,
-        gamePassMissions: gamePassMissions.map(m => m.id === id ? { ...m, claimed: true } : m)
-      });
+      set({ bpp: bpp + mission.reward, gamePassMissions: gamePassMissions.map(m => m.id === id ? { ...m, claimed: true } : m) });
     }
   },
 
   buyPremium: () => {
     const { gems } = get();
-    if (gems >= 15 && !get().isPremium) {
-      set({ gems: gems - 15, isPremium: true });
-    } else {
-      alert('Gemas insuficientes!');
-    }
+    if (gems >= 15 && !get().isPremium) { set({ gems: gems - 15, isPremium: true }); } 
+    else { alert('Gemas insuficientes!'); }
   },
 
   startIncubation: (id) => {
@@ -142,28 +186,55 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setMapHunt: (id, name, level, image, rarity = 'Normal') => {
     get().resetHuntSession();
-    set({ currentHuntType: { id, name, level, image, rarity }, mapTargets: [], scanningTarget: null });
+    set({ currentHuntType: { id, name, level, image, rarity }, mapTargets: [], scanningTarget: null, activeMapId: null });
     for (let i = 0; i < 4; i++) get().spawnSingleTarget();
   },
 
   spawnSingleTarget: () => {
-    const { currentHuntType, mapTargets } = get();
-    if (!currentHuntType || mapTargets.length >= 7) return;
+    const state = get();
+    const { activeMapId, serverMaps, serverDigimons, mapTargets, serverSettings } = state;
+    if (mapTargets.length >= 7) return;
+
+    let targetBase = state.currentHuntType;
+
+    if (activeMapId && serverMaps[activeMapId]) {
+      const spawns = serverMaps[activeMapId].spawns.split(',').map(s => s.trim()).filter(s => s);
+      if (spawns.length > 0) {
+        const randomSpawnId = spawns[Math.floor(Math.random() * spawns.length)];
+        const sDigi = serverDigimons[randomSpawnId];
+        if (sDigi) {
+          targetBase = {
+            id: sDigi.id,
+            name: sDigi.name,
+            level: serverMaps[activeMapId].minLevel, 
+            image: sDigi.menuImg,
+            rarity: sDigi.rarity as any
+          };
+        }
+      }
+    }
+
+    if (!targetBase) return;
 
     const x = Math.floor(Math.random() * 50) + 25; 
     const y = Math.floor(Math.random() * 30) + 40; 
-
-    const rand = Math.random();
-    let { id, name, image, level, rarity } = currentHuntType;
-
-    if (rand > 0.98 && id === 'patamon') {
-       id = 'angemon'; name = 'Angemon'; image = '/angemon.png'; level += 30; rarity = 'Divino';
-    } else if (rand > 0.92) { rarity = 'Chefe'; level += 10; } 
-    else if (rand > 0.80) { rarity = 'Elite'; level += 5; }
-
-    const hpMultiplier = rarity === 'Divino' ? 150 : rarity === 'Chefe' ? 100 : rarity === 'Elite' ? 50 : 30;
     
-    set({ mapTargets: [...get().mapTargets, { instanceId: `${id}_${Date.now()}_${Math.random()}`, id, name, level, hp: level * hpMultiplier, maxHp: level * hpMultiplier, image, rarity, x, y }] });
+    // RNG do CMS
+    const randRarity = Math.random() * 100;
+    let { id, name, image, level } = targetBase;
+    let rarity: 'Normal' | 'Elite' | 'Chefe' | 'Divino' = 'Normal';
+    
+    let cumulative = 0;
+    if (randRarity <= (cumulative += serverSettings.rngRates.divino)) { rarity = 'Divino'; level += 20; }
+    else if (randRarity <= (cumulative += serverSettings.rngRates.chefe)) { rarity = 'Chefe'; level += 10; }
+    else if (randRarity <= (cumulative += serverSettings.rngRates.elite)) { rarity = 'Elite'; level += 5; }
+
+    let sDigi = serverDigimons[id];
+    let baseHp = sDigi ? sDigi.hp : level * 10;
+    const hpMultiplier = rarity === 'Divino' ? 10 : rarity === 'Chefe' ? 5 : rarity === 'Elite' ? 2 : 1;
+    const finalHp = baseHp * hpMultiplier;
+    
+    set({ mapTargets: [...get().mapTargets, { instanceId: `${id}_${Date.now()}_${Math.random()}`, id, name, level, hp: finalHp, maxHp: finalHp, image, rarity, x, y }] });
   },
 
   attackMapTarget: (targetInstanceId, damage) => {
@@ -208,13 +279,14 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   finishDNAScan: (target) => {
-    const { myDigimons, activeDigimon, addCaptureLog, items, ownedGear, huntSession, autoHelper, useItem } = get();
+    const { myDigimons, activeDigimon, addCaptureLog, items, ownedGear, huntSession, autoHelper, useItem, serverSettings } = get();
     addCaptureLog(target.name, target.level, target.rarity);
     
     const currentStats = myDigimons[activeDigimon] || { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100 };
-    
     const rarityExpMult = target.rarity === 'Divino' ? 10 : target.rarity === 'Chefe' ? 5 : target.rarity === 'Elite' ? 2 : 1;
-    const earnedExp = target.level * 20 * rarityExpMult;
+    
+    // XP do CMS
+    const earnedExp = Math.floor(target.level * 20 * rarityExpMult * serverSettings.globalExpMultiplier);
     const newExp = currentStats.exp + earnedExp;
     
     let newLevel = currentStats.level;
@@ -231,7 +303,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       leveledUp = true;
     }
 
-    const earnedBits = target.level * 25 * rarityExpMult;
+    // Bits/Drops do CMS
+    const earnedBits = Math.floor(target.level * 25 * rarityExpMult * serverSettings.globalDropMultiplier);
     let droppedItem = null;
     let droppedGear = null;
     
@@ -247,9 +320,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const newItems = { ...items };
     if (droppedItem) newItems[droppedItem] = (newItems[droppedItem] || 0) + 1;
 
-    if (autoHelper.autoScan && newItems.scan > 0) {
-      useItem('scan', true);
-    }
+    if (autoHelper.autoScan && newItems.scan > 0) { useItem('scan', true); }
 
     set((state) => ({
       bits: state.bits + earnedBits,
@@ -288,14 +359,19 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   
   useItem: (itemId, isAuto = false) => {
-    const { items, myDigimons, activeDigimon, huntSession } = get();
+    const { items, myDigimons, activeDigimon, huntSession, storeItems } = get();
     if ((items[itemId] || 0) > 0) {
       const stats = myDigimons[activeDigimon];
       if (!stats) return;
 
       let heal = 0;
       if (itemId === 'meat') heal = 30;
-      if (itemId === 'potion') heal = 100;
+      else if (itemId === 'potion') heal = 100;
+      else {
+        // Verifica itens configurados no CMS
+        const customItem = storeItems.find(i => i.id === itemId);
+        if (customItem && customItem.type === 'consumable') heal = customItem.effectValue;
+      }
 
       const updatedSession = { ...huntSession };
       if (isAuto && itemId === 'potion') updatedSession.potionsUsed += 1;
@@ -329,33 +405,38 @@ export const useGameStore = create<GameState>((set, get) => ({
   completeTutorial: async (uid, gender, starterId) => {
     const newState = { avatar: gender === 'female' ? 'sora' : 'tai', hasCompletedTutorial: true, ownedDigimons: [starterId], activeDigimon: starterId, myDigimons: { [starterId]: { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100 } } };
     set(newState);
-    get().setMapHunt('koromon', 'Koromon', 1, '/koromon-esq.png', 'Normal'); 
-    try { await setDoc(doc(db, 'users', uid), { ...newState, bits: get().bits, gems: get().gems, items: get().items, equippedOutfit: get().equippedOutfit, ownedOutfits: get().ownedOutfits, captureLog: get().captureLog, ownedGear: get().ownedGear, equippedGear: get().equippedGear, soundEnabled: get().soundEnabled, bpp: get().bpp, isPremium: get().isPremium }, { merge: true }); } catch (error) { console.error('Erro', error); }
+    get().changeMap('floresta'); 
+    try { await updateDoc(doc(db, 'users', uid), { ...newState, bits: get().bits, gems: get().gems, items: get().items, equippedOutfit: get().equippedOutfit, ownedOutfits: get().ownedOutfits, captureLog: get().captureLog, ownedGear: get().ownedGear, equippedGear: get().equippedGear, soundEnabled: get().soundEnabled, bpp: get().bpp, isPremium: get().isPremium }); } catch (error) { console.error('Erro', error); }
   },
   
   loadProgress: async (uid) => {
     try {
-      const docSnap = await getDoc(doc(db, 'users', uid));
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        set({
-          bits: data.bits ?? 500, gems: data.gems ?? 50, avatar: data.avatar ?? 'tai', equippedOutfit: data.equippedOutfit ?? 'default', ownedOutfits: data.ownedOutfits ?? ['default'],
-          captureLog: data.captureLog ?? [], fragments: data.fragments ?? {}, ownedDigimons: data.ownedDigimons ?? [], myDigimons: data.myDigimons ?? {}, activeDigimon: data.activeDigimon ?? '',
-          items: data.items ?? { meat: 5, scan: 10, potion: 20 }, hasCompletedTutorial: data.hasCompletedTutorial ?? false, ownedGear: data.ownedGear ?? [], equippedGear: data.equippedGear ?? null,
-          incubatingEgg: data.incubatingEgg ?? null, soundEnabled: data.soundEnabled ?? true, bpp: data.bpp ?? 0, isPremium: data.isPremium ?? false, isDataLoaded: true
-        });
-        
-        if (data.hasCompletedTutorial && !get().currentHuntType) {
-           get().setMapHunt('koromon', 'Koromon', 1, '/koromon-esq.png', 'Normal');
-        }
-      } else { set({ isDataLoaded: true, hasCompletedTutorial: false }); }
+      await get().fetchServerData();
+      get().initServerData();
+
+      onSnapshot(doc(db, 'users', uid), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          set({
+            bits: data.bits ?? 500, gems: data.gems ?? 50, avatar: data.avatar ?? 'tai', equippedOutfit: data.equippedOutfit ?? 'default', ownedOutfits: data.ownedOutfits ?? ['default'],
+            captureLog: data.captureLog ?? [], fragments: data.fragments ?? {}, ownedDigimons: data.ownedDigimons ?? [], myDigimons: data.myDigimons ?? {}, activeDigimon: data.activeDigimon ?? '',
+            items: data.items ?? { meat: 5, scan: 10, potion: 20 }, hasCompletedTutorial: data.hasCompletedTutorial ?? false, ownedGear: data.ownedGear ?? [], equippedGear: data.equippedGear ?? null,
+            incubatingEgg: data.incubatingEgg ?? null, soundEnabled: data.soundEnabled ?? true, bpp: data.bpp ?? 0, isPremium: data.isPremium ?? false, isDataLoaded: true,
+            role: data.role || 'player'
+          });
+          
+          if (data.hasCompletedTutorial && !get().activeMapId && !get().currentHuntType) {
+             get().changeMap('floresta');
+          }
+        } else { set({ isDataLoaded: true, hasCompletedTutorial: false }); }
+      });
     } catch (error) { set({ isDataLoaded: true }); }
   },
   
   saveProgress: async (uid) => {
     try {
       const state = get();
-      await setDoc(doc(db, 'users', uid), { bits: state.bits, gems: state.gems, avatar: state.avatar, equippedOutfit: state.equippedOutfit, ownedOutfits: state.ownedOutfits, captureLog: state.captureLog, fragments: state.fragments, ownedDigimons: state.ownedDigimons, myDigimons: state.myDigimons, activeDigimon: state.activeDigimon, items: state.items, hasCompletedTutorial: state.hasCompletedTutorial, ownedGear: state.ownedGear, equippedGear: state.equippedGear, incubatingEgg: state.incubatingEgg, soundEnabled: state.soundEnabled, bpp: state.bpp, isPremium: state.isPremium }, { merge: true });
+      await updateDoc(doc(db, 'users', uid), { bits: state.bits, gems: state.gems, avatar: state.avatar, equippedOutfit: state.equippedOutfit, ownedOutfits: state.ownedOutfits, captureLog: state.captureLog, fragments: state.fragments, ownedDigimons: state.ownedDigimons, myDigimons: state.myDigimons, activeDigimon: state.activeDigimon, items: state.items, hasCompletedTutorial: state.hasCompletedTutorial, ownedGear: state.ownedGear, equippedGear: state.equippedGear, incubatingEgg: state.incubatingEgg, soundEnabled: state.soundEnabled, bpp: state.bpp, isPremium: state.isPremium });
     } catch (error) { console.error('Erro', error); }
   }
 }));

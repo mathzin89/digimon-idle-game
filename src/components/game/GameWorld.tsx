@@ -63,14 +63,13 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
   const [lootPopups, setLootPopups] = useState<{ id: number, x: number, y: number, exp: number, bits: number, item: string | null }[]>([]);
   const [deathMessage, setDeathMessage] = useState('');
 
-  // COORDENADAS REFEITAS (Baseadas exatamente no desenho da cidade cyberpunk)
   const cityHotspots: Hotspot[] = [
     { id: 'clinic', modal: 'toast', name: '🏥 Clínica', x: 45, y: 35, r: 3, msg: 'Clínica em construção!' },
     { id: 'shop', modal: 'shop', name: '🛒 Mercado', x: 65, y: 35, r: 3 },
-    { id: 'pc', modal: 'pc', name: '💻 Digi-Bank', x: 30, y: 47, r: 3 }, // O grande Cofre/Vault na esquerda
+    { id: 'pc', modal: 'pc', name: '💻 Digi-Bank', x: 30, y: 47, r: 3 }, 
     { id: 'farm', modal: 'toast', name: '🌱 Fazenda', x: 72, y: 62, r: 3, msg: 'Fazenda em breve!' },
     { id: 'arena', modal: 'toast', name: '⚔️ Arena', x: 82, y: 31, r: 3, msg: 'Arena PvP em breve!' },
-    { id: 'map', modal: 'map', name: '🗺️ Mapa Mundi', x: 50, y: 50, r: 4 } // Digivice no centro
+    { id: 'map', modal: 'map', name: '🗺️ Mapa Mundi', x: 50, y: 50, r: 4 } 
   ];
 
   useEffect(() => {
@@ -111,17 +110,15 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
     }
   }, [currentZone, avatar]);
 
-  // ÁREA DE COLISÃO REFEITA (Mais larga para alcançar todos os prédios novos)
   const isWalkable = (x: number, y: number) => {
       const distToCenter = Math.hypot(x - 50, y - 50);
-      if (distToCenter <= 18) return true; // Círculo central um pouco maior
+      if (distToCenter <= 18) return true; 
 
-      // Puxadinhos para alcançar a porta dos prédios
-      if (x >= 40 && x <= 50 && y >= 32 && y <= 40) return true; // Clínica
-      if (x >= 60 && x <= 70 && y >= 32 && y <= 40) return true; // Shop
-      if (x >= 28 && x <= 35 && y >= 42 && y <= 52) return true; // Digi-Bank (Vault)
-      if (x >= 65 && x <= 75 && y >= 55 && y <= 65) return true; // Fazenda
-      if (x >= 75 && x <= 85 && y >= 28 && y <= 38) return true; // Arena
+      if (x >= 40 && x <= 50 && y >= 32 && y <= 40) return true; 
+      if (x >= 60 && x <= 70 && y >= 32 && y <= 40) return true; 
+      if (x >= 28 && x <= 35 && y >= 42 && y <= 52) return true; 
+      if (x >= 65 && x <= 75 && y >= 55 && y <= 65) return true; 
+      if (x >= 75 && x <= 85 && y >= 28 && y <= 38) return true; 
 
       return false; 
   };
@@ -310,12 +307,16 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
                     backgroundColor: directionImg ? 'transparent' : 'rgba(255,0,0,0.5)'
                   }} 
                 />
-                {!isFainted && <div className="absolute bottom-1 w-8 h-2 bg-black/50 rounded-[100%] blur-[1px] -z-10"></div>}
+                {/* CORREÇÃO 1: Sombra centralizada com left-1/2 -translate-x-1/2 */}
+                {!isFainted && <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-6 h-1.5 bg-black/60 rounded-[100%] blur-[1px] -z-10"></div>}
               </div>
 
               {activeDigimon && !isFainted && (() => {
                 const activeStats = myDigimons[activeDigimon];
-                const visual = activeStats ? getDigimonVisuals(activeDigimon, activeStats.level, isForest) : null;
+                
+                // CORREÇÃO 2: Passando o nível "1" para a função forçar a renderizar a forma base do ID!
+                const visual = activeStats ? getDigimonVisuals(activeDigimon, 1, isForest) : null;
+                
                 if (!visual) return null;
                 
                 const hpPercent = Math.max(0, (activeStats.hp / activeStats.maxHp) * 100);
@@ -334,7 +335,8 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
                     ) : (
                       <img src={visual.img} className={`w-10 h-10 object-contain pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] transition-transform duration-200 ${directionImg.includes('esq') || directionImg.includes('esquerda') || directionImg.includes('Esquerda') ? '' : 'scale-x-[-1]'} ${isTakingDamage ? 'hit-anim' : ''}`} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                     )}
-                    <div className="absolute bottom-0 w-6 h-1.5 bg-black/50 rounded-[100%] blur-[1px] -z-10"></div>
+                    {/* Sombra centralizada do Digimon */}
+                    <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-5 h-1.5 bg-black/60 rounded-[100%] blur-[1px] -z-10"></div>
                   </div>
                 );
               })()}
