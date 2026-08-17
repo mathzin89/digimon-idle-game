@@ -20,14 +20,40 @@ interface Hotspot {
 
 export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameWorldProps) {
   const { 
-    avatar, // <-- Avatar puxado para resolver o problema da Sora
+    avatar, 
     mapTargets, scanningTarget, activeDigimon, myDigimons, equippedGear, soundEnabled,
     attackMapTarget, takeDamage, finishDNAScan, setMapHunt, isDataLoaded, hasCompletedTutorial, currentHuntType
   } = useGameStore();
 
   const [tamerPos, setTamerPos] = useState({ x: 50, y: 60 });
-  const [directionImg, setDirectionImg] = useState(`/${avatar === 'sora' ? 'sora' : 'andar'}-cima.png`);
+  
+  const getAvatarDirection = (gender: string, dir: string) => {
+    const isFemale = gender === 'sora';
+
+    if (isFemale) {
+       switch (dir) {
+         case 'baixo': return '/Frente feminina.png';
+         case 'cima': return '/costas feminina.png';
+         case 'esq': return '/esquerda feminina.png';
+         case 'dir': return '/Direita feminina.png';
+         case 'deitado': return '/Frente feminina.png'; 
+         default: return '/Frente feminina.png';
+       }
+    } else {
+       switch (dir) {
+         case 'baixo': return '/Frente - masculino.png';
+         case 'cima': return '/Costas masculina.png';
+         case 'esq': return '/Esquerda - Masculino.png';
+         case 'dir': return '/Direita - masculino.png';
+         case 'deitado': return '/deitado - masculino.png';
+         default: return '/Frente - masculino.png';
+       }
+    }
+  };
+
+  const [directionImg, setDirectionImg] = useState(getAvatarDirection(avatar, 'baixo'));
   const [frameStep, setFrameStep] = useState(0);
+  const [isFainted, setIsFainted] = useState(false);
   
   const isMovingRef = useRef(false);
   const lastAttackTimeRef = useRef<number>(0);
@@ -37,14 +63,14 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
   const [lootPopups, setLootPopups] = useState<{ id: number, x: number, y: number, exp: number, bits: number, item: string | null }[]>([]);
   const [deathMessage, setDeathMessage] = useState('');
 
-  // Hotspots da Cidade - Ajustados para as portas das construções
+  // COORDENADAS REFEITAS (Baseadas exatamente no desenho da cidade cyberpunk)
   const cityHotspots: Hotspot[] = [
-    { id: 'shop', modal: 'shop', name: '🛒 Mercado', x: 65, y: 30, r: 4 },
-    { id: 'pc', modal: 'pc', name: '💻 Digi-Bank', x: 50, y: 80, r: 4 },
-    { id: 'map', modal: 'map', name: '🗺️ Mapa Mundi', x: 50, y: 47, r: 3 }, 
-    { id: 'clinic', modal: 'toast', name: '🏥 Clínica', x: 32, y: 35, r: 4, msg: 'Clínica em construção!' },
-    { id: 'arena', modal: 'toast', name: '⚔️ Arena', x: 88, y: 32, r: 4, msg: 'Arena PvP em breve!' },
-    { id: 'farm', modal: 'toast', name: '🌱 Fazenda', x: 70, y: 70, r: 5, msg: 'Fazenda em breve!' }
+    { id: 'clinic', modal: 'toast', name: '🏥 Clínica', x: 45, y: 35, r: 3, msg: 'Clínica em construção!' },
+    { id: 'shop', modal: 'shop', name: '🛒 Mercado', x: 65, y: 35, r: 3 },
+    { id: 'pc', modal: 'pc', name: '💻 Digi-Bank', x: 30, y: 47, r: 3 }, // O grande Cofre/Vault na esquerda
+    { id: 'farm', modal: 'toast', name: '🌱 Fazenda', x: 72, y: 62, r: 3, msg: 'Fazenda em breve!' },
+    { id: 'arena', modal: 'toast', name: '⚔️ Arena', x: 82, y: 31, r: 3, msg: 'Arena PvP em breve!' },
+    { id: 'map', modal: 'map', name: '🗺️ Mapa Mundi', x: 50, y: 50, r: 4 } // Digivice no centro
   ];
 
   useEffect(() => {
@@ -68,52 +94,43 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
 
   useEffect(() => {
     const frameTimer = setInterval(() => {
-      if (isMovingRef.current) setFrameStep((prev) => (prev + 1) % walkSequence.length);
+      if (isMovingRef.current && !isFainted) setFrameStep((prev) => (prev + 1) % walkSequence.length);
       else setFrameStep(0); 
-    }, 280); 
+    }, 120); 
     return () => clearInterval(frameTimer);
-  }, []);
+  }, [isFainted]);
 
   const tamerFrame = walkSequence[frameStep];
 
   useEffect(() => {
     if (currentZone === 'cidade') {
-       setTamerPos({ x: 50, y: 55 }); 
-       setDirectionImg(`/${avatar === 'sora' ? 'sora' : 'andar'}-cima.png`);
+       setTamerPos({ x: 50, y: 58 }); 
+       setDirectionImg(getAvatarDirection(avatar, 'cima'));
+       setIsFainted(false);
        keysRef.current.clear();
     }
   }, [currentZone, avatar]);
 
-  // COLISÃO FÍSICA ESTRITA (Baseada no seu desenho isométrico exenpo.png)
+  // ÁREA DE COLISÃO REFEITA (Mais larga para alcançar todos os prédios novos)
   const isWalkable = (x: number, y: number) => {
-      // 1. Hub Central (Círculo)
-      if (Math.hypot(x - 50, y - 50) <= 9) return true;
+      const distToCenter = Math.hypot(x - 50, y - 50);
+      if (distToCenter <= 18) return true; // Círculo central um pouco maior
 
-      // 2. Pontes (Diagonais e Reta para baixo)
-      const isDiag1 = Math.abs((x - 50) - (y - 50)) < 4.5 && x >= 30 && x <= 70 && y >= 30 && y <= 70; // TopLeft -> BottomRight
-      const isDiag2 = Math.abs((x - 50) + (y - 50)) < 4.5 && x >= 30 && x <= 70 && y >= 30 && y <= 70; // TopRight -> BottomLeft
-      const isPipeDown = Math.abs(x - 50) < 4.5 && y >= 50 && y <= 80; // Ponte reta para o PC
-      if (isDiag1 || isDiag2 || isPipeDown) return true;
+      // Puxadinhos para alcançar a porta dos prédios
+      if (x >= 40 && x <= 50 && y >= 32 && y <= 40) return true; // Clínica
+      if (x >= 60 && x <= 70 && y >= 32 && y <= 40) return true; // Shop
+      if (x >= 28 && x <= 35 && y >= 42 && y <= 52) return true; // Digi-Bank (Vault)
+      if (x >= 65 && x <= 75 && y >= 55 && y <= 65) return true; // Fazenda
+      if (x >= 75 && x <= 85 && y >= 28 && y <= 38) return true; // Arena
 
-      // 3. Plataformas e Ilhas (Áreas quadradas das construções)
-      if (x >= 15 && x <= 40 && y >= 20 && y <= 45) return true; // Top-Left (Clínica)
-      if (x >= 60 && x <= 85 && y >= 20 && y <= 45) return true; // Top-Right (Shop/Arena Hub)
-      if (x >= 15 && x <= 45 && y >= 60 && y <= 85) return true; // Bottom-Left (Parque)
-      if (x >= 55 && x <= 85 && y >= 60 && y <= 85) return true; // Bottom-Right (Fazenda/Torre)
-      if (x >= 40 && x <= 60 && y >= 75 && y <= 95) return true; // Bottom-Center (Digi-Bank)
-
-      // 4. Ponte flutuante para a Arena (Sai da ilha do Shop para a direita)
-      if (x >= 75 && x <= 95 && Math.abs(y - 32) < 4) return true;
-
-      return false; // Água ou áreas não mapeadas bloqueiam o movimento
+      return false; 
   };
 
   useEffect(() => {
-    if (!isDataLoaded || !hasCompletedTutorial) return;
+    if (!isDataLoaded || !hasCompletedTutorial || isFainted) return;
 
     const moveInterval = setInterval(() => {
       const isModalOpen = document.querySelector('.z-50.backdrop-blur-sm') !== null || document.querySelector('.z-\\[60\\]') !== null;
-      const avatarPrefix = avatar === 'sora' ? 'sora' : 'andar';
       
       if (currentZone === 'cidade') {
          if (isModalOpen) {
@@ -131,7 +148,7 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
          if (dx !== 0 || dy !== 0) {
             isMovingRef.current = true;
             const dist = Math.sqrt(dx*dx + dy*dy);
-            const speed = 0.15; 
+            const speed = 0.22; 
             
             setTamerPos(prev => {
                 let nextX = prev.x + (dx/dist) * speed;
@@ -153,14 +170,14 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
                             setActiveModal(spot.modal as ModalType);
                             keysRef.current.clear(); 
                         }
-                        finalX = prev.x;
-                        finalY = prev.y;
+                        finalX = prev.x - (dx/dist) * 2;
+                        finalY = prev.y - (dy/dist) * 2;
                         break;
                     }
                 }
 
-                if (Math.abs(dx) > Math.abs(dy)) setDirectionImg(dx > 0 ? `/${avatarPrefix}-dir.png` : `/${avatarPrefix}-esq.png`);
-                else setDirectionImg(dy > 0 ? `/${avatarPrefix}-baixo.png` : `/${avatarPrefix}-cima.png`);
+                if (Math.abs(dx) > Math.abs(dy)) setDirectionImg(getAvatarDirection(avatar, dx > 0 ? 'dir' : 'esq'));
+                else setDirectionImg(getAvatarDirection(avatar, dy > 0 ? 'baixo' : 'cima'));
 
                 return { x: finalX, y: finalY };
             });
@@ -169,7 +186,6 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
          }
 
       } else {
-         // FLORESTA (Idle Caça Automática)
          if (scanningTarget || !mapTargets || mapTargets.length === 0 || isModalOpen) {
             isMovingRef.current = false;
             return;
@@ -183,8 +199,8 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
             const dy = target.y - prev.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
 
-            if (Math.abs(dx) > Math.abs(dy)) setDirectionImg(dx > 0 ? `/${avatarPrefix}-dir.png` : `/${avatarPrefix}-esq.png`);
-            else setDirectionImg(dy > 0 ? `/${avatarPrefix}-baixo.png` : `/${avatarPrefix}-cima.png`);
+            if (Math.abs(dx) > Math.abs(dy)) setDirectionImg(getAvatarDirection(avatar, dx > 0 ? 'dir' : 'esq'));
+            else setDirectionImg(getAvatarDirection(avatar, dy > 0 ? 'baixo' : 'cima'));
 
             if (dist < 4) {
                isMovingRef.current = false; 
@@ -224,9 +240,15 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
 
                  if (isDead) {
                    const pName = getDigimonVisuals(activeDigimon, myLevel, true).name;
+                   setIsFainted(true); 
+                   setDirectionImg(getAvatarDirection(avatar, 'deitado'));
                    setDeathMessage(`O seu ${pName} desmaiou e foi levado para a Base!`);
-                   setCurrentZone('cidade');
-                   setTimeout(() => setDeathMessage(''), 3500);
+                   
+                   setTimeout(() => {
+                     setDeathMessage('');
+                     setIsFainted(false);
+                     setCurrentZone('cidade');
+                   }, 3000); 
                  }
                }
                return prev;
@@ -240,7 +262,7 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
     }, 30);
 
     return () => clearInterval(moveInterval);
-  }, [mapTargets, scanningTarget, activeDigimon, myDigimons, attackMapTarget, takeDamage, isDataLoaded, hasCompletedTutorial, currentZone, equippedGear, soundEnabled, setCurrentZone, avatar]);
+  }, [mapTargets, scanningTarget, activeDigimon, myDigimons, attackMapTarget, takeDamage, isDataLoaded, hasCompletedTutorial, currentZone, equippedGear, soundEnabled, setCurrentZone, avatar, isFainted]);
 
   useEffect(() => {
     if (scanningTarget) {
@@ -257,30 +279,43 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
 
   const positions = ['0%', '50%', '100%'];
   const isAttacking = damageNumbers.some(d => d.target === 'enemy');
+  const isForest = currentZone === 'floresta';
 
   return (
     <>
-      <div className="absolute inset-0 z-10 overflow-hidden pointer-events-none">
+      <div className="absolute inset-0 z-10 overflow-hidden pointer-events-none bg-[#050811]">
           
           <div 
-            className={`absolute top-0 left-0 bg-cover bg-center bg-no-repeat transition-all duration-75 ease-linear ${currentZone === 'floresta' ? '[image-rendering:pixelated]' : ''}`} 
+            className={`absolute top-0 left-0 transition-transform duration-75 ease-linear bg-center bg-no-repeat ${isForest ? '[image-rendering:pixelated] bg-cover' : 'bg-cover'}`} 
             style={{ 
-              backgroundImage: currentZone === 'floresta' ? "url('/map-bg.png')" : "url('/cidade-bg.jpg')",
-              width: currentZone === 'floresta' ? '150vw' : '180vw', 
-              height: currentZone === 'floresta' ? '150vh' : '180vh', 
-              transform: `translate(clamp(-${currentZone === 'floresta' ? '50' : '80'}vw, calc(50vw - ${tamerPos.x * (currentZone === 'floresta' ? 1.5 : 1.8)}vw), 0vw), clamp(-${currentZone === 'floresta' ? '50' : '80'}vh, calc(50vh - ${tamerPos.y * (currentZone === 'floresta' ? 1.5 : 1.8)}vh), 0vh))`
+              backgroundImage: isForest ? "url('/map-bg.png')" : "url('/cidade-bg.jpg')",
+              width: isForest ? '150vw' : '3200px', 
+              height: isForest ? '150vh' : '1800px', 
+              transform: isForest 
+                  ? `translate(clamp(-50vw, calc(50vw - ${tamerPos.x * 1.5}vw), 0vw), clamp(-50vh, calc(50vh - ${tamerPos.y * 1.5}vh), 0vh))`
+                  : `translate(calc(50vw - ${(tamerPos.x / 100) * 3200}px), calc(50vh - ${(tamerPos.y / 100) * 1800}px))`
             }}
           >
             
             <div className={`absolute flex items-center gap-3 z-30 transition-all duration-75 ease-linear ${isAttacking ? 'attacking-bump' : ''}`} style={{ top: `${tamerPos.y}%`, left: `${tamerPos.x}%`, transform: 'translate(-50%, -50%)' }}>
               <div className="relative flex flex-col items-center justify-center">
-                <div className="pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]" style={{ width: '48px', height: '48px', backgroundImage: `url('${directionImg}')`, backgroundSize: '300% 100%', backgroundPosition: `${positions[tamerFrame]} 0%`, imageRendering: 'pixelated' }} />
-                <div className="absolute bottom-1 w-8 h-2 bg-black/50 rounded-[100%] blur-[1px] -z-10"></div>
+                <div 
+                  className={`pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] ${isFainted ? 'animate-pulse grayscale' : ''}`} 
+                  style={{ 
+                    width: '48px', height: '48px', 
+                    backgroundImage: `url('${directionImg}')`, 
+                    backgroundSize: isFainted ? '100% 100%' : '300% 100%', 
+                    backgroundPosition: isFainted ? '0% 0%' : `${positions[tamerFrame]} 0%`, 
+                    imageRendering: 'pixelated',
+                    backgroundColor: directionImg ? 'transparent' : 'rgba(255,0,0,0.5)'
+                  }} 
+                />
+                {!isFainted && <div className="absolute bottom-1 w-8 h-2 bg-black/50 rounded-[100%] blur-[1px] -z-10"></div>}
               </div>
 
-              {activeDigimon && (() => {
+              {activeDigimon && !isFainted && (() => {
                 const activeStats = myDigimons[activeDigimon];
-                const visual = activeStats ? getDigimonVisuals(activeDigimon, activeStats.level, currentZone === 'floresta') : null;
+                const visual = activeStats ? getDigimonVisuals(activeDigimon, activeStats.level, isForest) : null;
                 if (!visual) return null;
                 
                 const hpPercent = Math.max(0, (activeStats.hp / activeStats.maxHp) * 100);
@@ -288,16 +323,16 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
 
                 return (
                   <div className="relative flex flex-col items-center justify-center">
-                    {currentZone === 'floresta' && (
+                    {isForest && (
                       <div className="absolute -top-4 w-10 h-1.5 bg-[#111] border border-black rounded-full overflow-hidden z-20 shadow-md">
                         <div className="h-full bg-red-500 transition-all duration-200" style={{ width: `${hpPercent}%` }}></div>
                       </div>
                     )}
 
                     {visual.isSprite ? (
-                      <div className={`pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] transition-transform duration-200 ${directionImg.includes('esq') ? '' : 'scale-x-[-1]'} ${isTakingDamage ? 'hit-anim' : ''}`} style={{ width: '40px', height: '40px', backgroundImage: `url('${visual.img}')`, backgroundSize: '300% 100%', backgroundPosition: `${positions[tamerFrame]} 0%`, imageRendering: 'pixelated' }} />
+                      <div className={`pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] transition-transform duration-200 ${directionImg.includes('esq') || directionImg.includes('esquerda') || directionImg.includes('Esquerda') ? '' : 'scale-x-[-1]'} ${isTakingDamage ? 'hit-anim' : ''}`} style={{ width: '40px', height: '40px', backgroundImage: `url('${visual.img}')`, backgroundSize: '300% 100%', backgroundPosition: `${positions[tamerFrame]} 0%`, imageRendering: 'pixelated' }} />
                     ) : (
-                      <img src={visual.img} className={`w-10 h-10 object-contain pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] transition-transform duration-200 ${directionImg.includes('esq') ? '' : 'scale-x-[-1]'} ${isTakingDamage ? 'hit-anim' : ''}`} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                      <img src={visual.img} className={`w-10 h-10 object-contain pixelated relative z-10 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] transition-transform duration-200 ${directionImg.includes('esq') || directionImg.includes('esquerda') || directionImg.includes('Esquerda') ? '' : 'scale-x-[-1]'} ${isTakingDamage ? 'hit-anim' : ''}`} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                     )}
                     <div className="absolute bottom-0 w-6 h-1.5 bg-black/50 rounded-[100%] blur-[1px] -z-10"></div>
                   </div>
@@ -305,9 +340,9 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
               })()}
             </div>
 
-            {currentZone === 'floresta' && (
+            {isForest && (
               <>
-                {mapTargets && mapTargets.map((target) => {
+                 {mapTargets && mapTargets.map((target) => {
                   const rarity = (target as any).rarity || 'Normal';
                   const isBoss = rarity === 'Chefe' || rarity === 'Divino';
                   const auraClass = rarity === 'Divino' ? 'aura-divino' : rarity === 'Chefe' ? 'aura-chefe' : rarity === 'Elite' ? 'aura-elite' : '';
@@ -384,11 +419,11 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
               </>
             )}
 
-            {currentZone === 'cidade' && cityHotspots.map(spot => {
+            {!isForest && cityHotspots.map(spot => {
                 const dist = Math.sqrt(Math.pow(tamerPos.x - spot.x, 2) + Math.pow(tamerPos.y - spot.y, 2));
-                if (dist < 10) {
+                if (dist < 8) {
                     return (
-                        <div key={spot.id} className="absolute z-40 transform -translate-x-1/2 -translate-y-1/2 animate-bounce pointer-events-none" style={{ top: `${spot.y - 8}%`, left: `${spot.x}%` }}>
+                        <div key={spot.id} className="absolute z-40 transform -translate-x-1/2 -translate-y-full animate-pulse pointer-events-none" style={{ top: `${spot.y - 2}%`, left: `${spot.x}%` }}>
                             <span className="bg-[#0a0f1a]/90 text-cyan-400 text-[10px] font-bold px-3 py-1 rounded-full border border-cyan-500/30 backdrop-blur-sm shadow-lg whitespace-nowrap uppercase tracking-widest">{spot.name}</span>
                         </div>
                     )
@@ -400,9 +435,9 @@ export function GameWorld({ currentZone, setActiveModal, setCurrentZone }: GameW
       </div>
 
       {deathMessage && (
-        <div className="absolute top-[30%] left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] bg-[#0a0f1a] border border-[#1e293b] py-4 px-8 shadow-2xl rounded-lg text-center flex flex-col items-center">
-          <h2 className="text-lg font-bold text-red-500 uppercase tracking-widest mb-1">Aviso do Sistema</h2>
-          <p className="text-slate-300 text-xs">{deathMessage}</p>
+        <div className="absolute top-[30%] left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] bg-[#0a0f1a] border border-[#1e293b] py-4 px-8 shadow-2xl rounded-lg text-center flex flex-col items-center animate-in fade-in zoom-in duration-300">
+          <h2 className="text-xl font-black text-red-500 uppercase tracking-widest mb-2 drop-shadow-md">Aviso do Sistema</h2>
+          <p className="text-slate-200 text-sm font-bold uppercase">{deathMessage}</p>
         </div>
       )}
     </>

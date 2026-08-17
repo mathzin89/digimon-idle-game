@@ -2,12 +2,14 @@
 import React from 'react';
 
 interface TamerPortraitProps {
-  gender: 'male' | 'female';
+  gender?: 'male' | 'female' | 'tai' | 'sora' | string;
   className?: string;
 }
 
-export function TamerPortrait({ gender, className = '' }: TamerPortraitProps) {
-  const imgSrc = gender === 'female' ? '/face-2.png' : '/Face-tamer.png';
+export function TamerPortrait({ gender = 'tai', className = '' }: TamerPortraitProps) {
+  // Lê se é a Sora (menina) ou o Tai (menino) e puxa as imagens padronizadas novas
+  const isFemale = gender === 'female' || gender === 'sora';
+  const imgSrc = isFemale ? '/Rosto normal feminino.png' : '/Rosto 1 - Normal.png';
 
   return (
     <div 
@@ -16,8 +18,8 @@ export function TamerPortrait({ gender, className = '' }: TamerPortraitProps) {
         width: '96px',
         height: '96px',
         backgroundImage: `url('${imgSrc}')`,
-        backgroundSize: '400% auto', 
-        backgroundPosition: 'left center', 
+        backgroundSize: 'contain', 
+        backgroundPosition: 'center', 
         backgroundRepeat: 'no-repeat',
         imageRendering: 'pixelated'
       }}

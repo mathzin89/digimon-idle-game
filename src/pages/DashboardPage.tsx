@@ -6,19 +6,20 @@ import { useAuthStore } from '../store/useAuthStore';
 import { getDigimonVisuals, MenuSprite } from '../utils/digimonVisuals';
 import { GameWorld, ModalType } from '../components/game/GameWorld';
 import { GameModals } from '../components/game/GameModals';
+import { TamerPortrait } from '../components/ui/TamerPortrait'; // Certifique-se de importar!
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   
   const { 
-    tamerName, bits, gems, ownedDigimons, myDigimons, activeDigimon, items,
+    tamerName, bits, gems, avatar, ownedDigimons, myDigimons, activeDigimon, items,
     setActiveDigimon, useItem, saveProgress, loadProgress, isDataLoaded, hasCompletedTutorial, evolveDigimon,
     huntSession
   } = useGameStore();
   
   const [activeModal, setActiveModal] = useState<ModalType>(null);
-  const [currentZone, setCurrentZone] = useState<'floresta' | 'cidade'>('floresta');
+  const [currentZone, setCurrentZone] = useState<'floresta' | 'cidade'>('cidade');
 
   // CHAT FUNCIONAL
   const [activeChatTab, setActiveChatTab] = useState<'mundo' | 'comercio' | 'duvidas'>('mundo');
@@ -82,6 +83,7 @@ export function DashboardPage() {
 
   const huntTimeMinutes = Math.floor((Date.now() - huntSession.timeStart) / 60000);
   const huntTimeHours = Math.floor(huntTimeMinutes / 60);
+  const tamerGender = (avatar === 'sora' || avatar === 'mimi') ? 'female' : 'male';
 
   return (
     <div className="min-h-screen relative w-full h-screen overflow-hidden bg-[#000] font-sans selection:bg-cyan-500/30">
@@ -142,12 +144,13 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* LEFT PANEL TEAM (Estilo image_a990a3.png - Borda Dourada Exata e Imagens Estáticas Limpas) */}
+      {/* LEFT PANEL TEAM */}
       <div className="absolute top-[60px] left-4 w-[240px] z-40 bg-[#0f121a] border border-[#1e293b] rounded-lg shadow-2xl flex flex-col pointer-events-auto">
         
         <div className="p-3 border-b border-[#1e293b] flex items-center gap-3">
-          <div className="w-[38px] h-[38px] bg-[#000] rounded-full border border-yellow-500 flex items-center justify-center overflow-hidden shadow-inner">
-             <span className="text-lg">🧑‍🚀</span>
+          <div className="w-[38px] h-[38px] bg-[#000] rounded-full border border-yellow-500 flex items-center justify-center overflow-hidden shadow-inner relative">
+             {/* AQUI ESTÁ A CORREÇÃO: TamerPortrait com zoom certinho */}
+             <TamerPortrait gender={avatar} />
           </div>
           <div className="flex flex-col justify-center">
             <h2 className="font-bold text-[#facc15] text-[12px] tracking-wider uppercase leading-none drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">{user?.displayName || tamerName}</h2>
@@ -166,9 +169,17 @@ export function DashboardPage() {
              return (
                <div key={id} onClick={() => setActiveDigimon(id)} className={`bg-[#141824] rounded-lg p-2.5 flex gap-3 cursor-pointer transition-all border shadow-md ${isActive ? 'border-[#facc15]' : 'border-[#2d3748]'}`}>
                  
-                 {/* AVATAR COM FOTO LIMPA E ESTATICA (menuImg) */}
+                 {/* AVATAR COM ZOOM PERFEITO PRA MOSTRAR SÓ 1 KOROMON */}
                  <div className={`w-[42px] h-[42px] bg-[#000] rounded-full border-2 flex items-center justify-center flex-shrink-0 relative overflow-hidden ${isActive ? 'border-[#facc15]' : 'border-[#2d3748]'}`}>
-                    <img src={visual.menuImg} alt={visual.name} className="w-[30px] h-[30px] object-contain relative z-10" />
+                    <div 
+                      className="pixelated absolute inset-0"
+                      style={{
+                        backgroundImage: `url('${visual.menuImg}')`,
+                        backgroundSize: '300% 100%', // Corta a spritesheet de 3 frames
+                        backgroundPosition: '0% 0%', // Pega só o primeiro frame
+                        imageRendering: 'pixelated'
+                      }}
+                    />
                  </div>
 
                  <div className="flex-1 flex flex-col justify-center mt-[-1px]">
@@ -197,7 +208,7 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* CHAT BOX DIREITA (Abaixo do Analyzer, na esquerda!) */}
+      {/* CHAT BOX DIREITA */}
       <div className="absolute bottom-4 left-4 w-[240px] h-[180px] z-40 bg-[#0f121a] border border-[#1e293b] rounded-lg shadow-2xl flex flex-col pointer-events-auto overflow-hidden">
         <div className="flex bg-[#0a0f1a] border-b border-[#1e293b]">
           <button onClick={() => setActiveChatTab('mundo')} className={`flex-1 py-1.5 text-[9px] font-bold uppercase tracking-wider transition-colors ${activeChatTab === 'mundo' ? 'text-[#facc15] border-b-2 border-[#facc15] bg-[#141824]' : 'text-slate-400 hover:text-white hover:bg-[#141824]'}`}>Mundo</button>
@@ -230,7 +241,7 @@ export function DashboardPage() {
         </form>
       </div>
 
-      {/* ANALYZER DOCKED NA DIREITA (Fica aberto na tela) */}
+      {/* ANALYZER DOCKED NA DIREITA */}
       {activeModal === 'quests' && (
         <div className="absolute top-[60px] right-4 bottom-4 w-[280px] bg-[#0f121a] border border-[#1e293b] rounded-lg shadow-2xl flex flex-col pointer-events-auto z-40 overflow-hidden animate-in slide-in-from-right duration-300">
            
@@ -273,7 +284,6 @@ export function DashboardPage() {
               </div>
            </div>
            
-           {/* BOTÃO DA DIGIPÉDIA ENCAIXADO NO FUNDO DO ANALYZER */}
            <div className="p-3 bg-[#0a0f1a] border-t border-[#1e293b]">
               <button 
                 onClick={() => setActiveModal('digipedia')} 
