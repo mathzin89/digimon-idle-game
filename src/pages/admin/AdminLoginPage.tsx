@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../services/firebase';
 
 export function AdminLoginPage() {
@@ -12,7 +12,7 @@ export function AdminLoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  // LOGIN NORMAL COM TRAVA DE SEGURANÇA
+  // LOGIN NORMAL COM TRAVA DE SEGURANÇA RBAC
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -28,6 +28,7 @@ export function AdminLoginPage() {
         const data = docSnap.data();
         const role = data.role || 'player';
 
+        // Apenas diretores passam daqui
         if (role === 'owner' || role === 'admin' || role === 'mod') {
           navigate('/admin/dashboard');
         } else {
@@ -41,41 +42,6 @@ export function AdminLoginPage() {
     } catch (err: any) {
       console.error(err);
       setError('Credenciais incorretas. Use a mesma conta do jogo.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // FUNÇÃO DE BOOTSTRAP (PRIMEIRO ACESSO)
-  const handleClaimRoot = async () => {
-    if (!email || !password) {
-      setError('Preencha seu e-mail e senha antes de reivindicar o servidor.');
-      return;
-    }
-    
-    if (!window.confirm('ATENÇÃO: Isso vai forçar sua conta a virar [OWNER]. Tem certeza?')) return;
-
-    setError('');
-    setIsLoading(true);
-
-    try {
-      // 1. Loga com a sua conta normal
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      // 2. Injeta a tag de OWNER direto no seu documento
-      await updateDoc(doc(db, 'users', user.uid), {
-        role: 'owner'
-      });
-
-      alert('👑 Conta promovida a OWNER com sucesso! Bem-vindo ao sistema.');
-      
-      // 3. Libera a entrada
-      navigate('/admin/dashboard');
-
-    } catch (err: any) {
-      console.error(err);
-      setError('Erro ao reivindicar. Verifique se o e-mail e senha estão corretos.');
     } finally {
       setIsLoading(false);
     }
@@ -138,21 +104,11 @@ export function AdminLoginPage() {
           </button>
         </form>
 
-        {/* BOTÃO MÁGICO PARA O PRIMEIRO ACESSO */}
-        <div className="mt-6 border-t-2 border-blue-50 pt-6">
-          <button 
-            type="button"
-            onClick={handleClaimRoot}
-            disabled={isLoading}
-            className="w-full bg-orange-100 border-2 border-orange-200 hover:bg-orange-500 hover:text-white hover:border-orange-500 text-orange-600 font-black py-3 rounded-xl uppercase tracking-widest text-[10px] transition-all shadow-sm disabled:opacity-50"
-          >
-            👑 Reivindicar Servidor (Primeiro Acesso)
-          </button>
-          <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest text-center mt-3">
-            Use apenas uma vez para registrar a sua conta como ROOT.
+        <div className="mt-6 text-center">
+          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+            Sistema com monitoramento de intrusão ativo.
           </p>
         </div>
-
       </div>
     </div>
   );
