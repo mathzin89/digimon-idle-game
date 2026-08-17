@@ -2,6 +2,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 // O Vite usa import.meta.env para ler as chaves seguras do arquivo .env
 const firebaseConfig = {
@@ -21,3 +22,5 @@ export const auth = getAuth(app);
 
 // Inicializa e exporta o Banco de Dados (Para salvar os Digimons e o inventário)
 export const db = getFirestore(app);
+
+export const storage = getStorage(app);
