@@ -6,6 +6,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { getDigimonVisuals } from '../utils/digimonVisuals';
 import { GameWorld, ModalType } from '../components/game/GameWorld';
 import { GameModals } from '../components/game/GameModals';
+import { IncubatorModal } from '../components/game/IncubatorModal'; // 🔥 IMPORTADO AQUI
 import { TamerPortrait } from '../components/ui/TamerPortrait';
 
 export function DashboardPage() {
@@ -15,7 +16,7 @@ export function DashboardPage() {
   const { 
     tamerName, bits, gems, bpp, avatar, ownedDigimons, myDigimons, activeDigimon, items,
     setActiveDigimon, useItem, saveProgress, loadProgress, isDataLoaded, hasCompletedTutorial, evolveDigimon,
-    huntSession, role
+    huntSession, role, serverDigimons
   } = useGameStore();
   
   const [activeModal, setActiveModal] = useState<ModalType>(null);
@@ -39,7 +40,7 @@ export function DashboardPage() {
     const newMsg = {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       author: user?.displayName || tamerName,
-      level: myDigimons[activeDigimon]?.level || 1,
+      level: Math.floor((bpp || 0) / 100) + 1,
       role: role,
       text: chatInput
     };
@@ -111,7 +112,6 @@ export function DashboardPage() {
 
       <GameWorld currentZone={currentZone} setActiveModal={setActiveModal} setCurrentZone={setCurrentZone} />
 
-      {/* WALLET / MOEDAS NO CANTO SUPERIOR DIREITO */}
       <div className="absolute top-4 right-4 z-50 flex items-center gap-3 pointer-events-auto">
         <div className="bg-[#0f121a]/90 backdrop-blur-md border border-yellow-500/30 px-3 py-1.5 rounded-full flex items-center gap-2 shadow-[0_4px_10px_rgba(0,0,0,0.5)] cursor-pointer hover:scale-105 transition-transform" title="Bits">
           <span className="text-yellow-500 text-sm drop-shadow-md leading-none">🪙</span>
@@ -127,7 +127,6 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* TOP MENU BAR COMPACTA */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-50 bg-[#0f121a]/95 border border-[#1e293b] rounded-full px-4 py-2 flex items-center gap-3 shadow-[0_4px_15px_rgba(0,0,0,0.8)] backdrop-blur-md">
         
         <div className="flex items-center gap-4 px-1">
@@ -159,7 +158,6 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* LEFT PANEL TEAM */}
       <div className="absolute top-[60px] left-4 w-[240px] z-40 bg-[#0f121a] border border-[#1e293b] rounded-lg shadow-2xl flex flex-col pointer-events-auto">
         
         <div className="p-3 border-b border-[#1e293b] flex items-center gap-3">
@@ -180,6 +178,10 @@ export function DashboardPage() {
              const hpProgress = (stats?.hp / stats?.maxHp) * 100 || 0;
              const visual = getDigimonVisuals(id, stats?.level || 1, true);
 
+             // LÓGICA DE EVOLUÇÃO
+             const sDigi = serverDigimons[id];
+             const canEvolve = sDigi && sDigi.evolvesTo && stats?.level >= sDigi.evolveLevel;
+
              return (
                <div key={id} onClick={() => setActiveDigimon(id)} className={`bg-[#141824] rounded-lg p-2.5 flex gap-3 cursor-pointer transition-all border shadow-md ${isActive ? 'border-[#facc15]' : 'border-[#2d3748]'}`}>
                  
@@ -199,7 +201,17 @@ export function DashboardPage() {
                    
                    <div className="flex justify-between items-center mb-1.5">
                      <span className="text-[10px] font-bold text-white uppercase tracking-widest">{visual.name}</span>
-                     <span className="text-[#38bdf8] text-[10px] font-bold">Lv.{stats?.level || 1}</span>
+                     <div className="flex items-center gap-2">
+                       {canEvolve && (
+                         <button 
+                           onClick={(e) => { e.stopPropagation(); evolveDigimon(id); }} 
+                           className="bg-yellow-500 hover:bg-yellow-400 text-black text-[8px] px-1.5 py-0.5 rounded font-black uppercase shadow-[0_0_8px_rgba(234,179,8,0.5)] animate-pulse"
+                         >
+                           Evoluir!
+                         </button>
+                       )}
+                       <span className="text-[#38bdf8] text-[10px] font-bold">Lv.{stats?.level || 1}</span>
+                     </div>
                    </div>
                    
                    <div className="w-full h-[8px] bg-[#000] overflow-hidden mb-1.5 relative rounded-[2px]">
@@ -221,7 +233,6 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* CHAT BOX DIREITA */}
       <div className="absolute bottom-4 left-4 w-[240px] h-[180px] z-40 bg-[#0f121a] border border-[#1e293b] rounded-lg shadow-2xl flex flex-col pointer-events-auto overflow-hidden">
         <div className="flex bg-[#0a0f1a] border-b border-[#1e293b]">
           <button onClick={() => setActiveChatTab('mundo')} className={`flex-1 py-1.5 text-[9px] font-bold uppercase tracking-wider transition-colors ${activeChatTab === 'mundo' ? 'text-[#facc15] border-b-2 border-[#facc15] bg-[#141824]' : 'text-slate-400 hover:text-white hover:bg-[#141824]'}`}>Mundo</button>
@@ -256,7 +267,6 @@ export function DashboardPage() {
         </form>
       </div>
 
-      {/* ANALYZER DOCKED NA DIREITA */}
       {activeModal === 'quests' && (
         <div className="absolute top-[60px] right-4 bottom-4 w-[280px] bg-[#0f121a] border border-[#1e293b] rounded-lg shadow-2xl flex flex-col pointer-events-auto z-40 overflow-hidden animate-in slide-in-from-right duration-300">
            
@@ -310,8 +320,20 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* Renderiza GameModals ignorando o Analyzer (pois ele agora é Docked) */}
-      {activeModal && activeModal !== 'quests' && <GameModals activeModal={activeModal} closeModal={() => setActiveModal(null)} setCurrentZone={setCurrentZone} handleLogout={handleLogout} />}
+      {/* 🔥 INJEÇÃO DA INCUBADORA AQUI */}
+      {activeModal === 'incubator' && (
+        <IncubatorModal onClose={() => setActiveModal(null)} />
+      )}
+
+      {/* 🔥 PROTEÇÃO PARA NÃO DUPLICAR MODAIS */}
+      {activeModal && activeModal !== 'quests' && activeModal !== 'incubator' && (
+        <GameModals 
+          activeModal={activeModal} 
+          closeModal={() => setActiveModal(null)} 
+          setCurrentZone={setCurrentZone} 
+          handleLogout={handleLogout} 
+        />
+      )}
     </div>
   );
 }

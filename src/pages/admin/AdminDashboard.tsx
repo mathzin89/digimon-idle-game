@@ -9,7 +9,7 @@ import { db } from '../../services/firebase';
 import { PlayersTab } from './tabs/PlayersTab';
 import { AnalyticsTab } from './tabs/AnalyticsTab';
 import { DigimonTab } from './tabs/DigimonTab';
-import { MapsTab } from './tabs/MapsTab';
+import { MapTab } from './tabs/MapsTab';
 import { ArmoryTab } from './tabs/ArmoryTab';
 import { GamePassTab } from './tabs/GamePassTab';
 import { EventsTab } from './tabs/EventsTab';
@@ -48,7 +48,7 @@ export function AdminDashboard() {
       case 'players': return <PlayersTab />;
       case 'analytics': return <AnalyticsTab />;
       case 'digimons': return <DigimonTab />;
-      case 'maps': return <MapsTab />;
+      case 'maps': return <MapTab />;
       case 'armory': return <ArmoryTab />;
       case 'gamepass': return <GamePassTab />;
       case 'events': return <EventsTab />;

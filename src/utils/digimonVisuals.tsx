@@ -3,6 +3,7 @@ import React from 'react';
 
 export const digimonDict: Record<string, { name: string, img: string, menuImg: string, isSprite?: boolean, menuFrames?: number }> = {
   'koromon': { name: 'Koromon', img: '/koromon-esq.png', menuImg: '/koromon-esq.png', isSprite: true, menuFrames: 3 },
+  'kuromon': { name: 'Kuromon', img: '/kuromon-esq.png', menuImg: '/kuromon-esq.png', isSprite: true, menuFrames: 3 }, // Added Kuromon here!
   'agumon': { name: 'Agumon', img: '/agu-anima.png', menuImg: '/agu-dg-esquerda.png', isSprite: true, menuFrames: 3 },
   'gabumon': { name: 'Gabumon', img: '/gabumon.png', menuImg: '/gabumon.png', isSprite: true, menuFrames: 3 },
   'palmon': { name: 'Palmon', img: '/palmon.png', menuImg: '/palmon.png', isSprite: true, menuFrames: 3 },
@@ -22,7 +23,9 @@ export const getDigimonVisuals = (baseId: string, level: number, isPlayer: boole
     return { name: 'WarGreymon', img: '/wargreymon.png', menuImg: '/wargreymon.png', isSprite: true, menuFrames: 3 };
   }
   
-  const data = digimonDict[baseId];
+  // Make sure we check in lowercase just in case
+  const safeId = baseId.toLowerCase();
+  const data = digimonDict[safeId];
   if (data) return data;
   
   return { name: baseId, img: `/${baseId}.png`, menuImg: `/${baseId}.png`, isSprite: true, menuFrames: 3 };

@@ -1,19 +1,20 @@
 // src/store/useGameStore.ts
 import { create } from 'zustand';
-import { doc, getDoc, setDoc, collection, getDocs, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, onSnapshot, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
-interface DigimonStats { level: number; exp: number; maxExp: number; hp: number; maxHp: number; }
-interface MapTarget { instanceId: string; id: string; name: string; level: number; hp: number; maxHp: number; image: string; rarity: 'Normal' | 'Elite' | 'Chefe' | 'Divino'; x: number; y: number; }
+interface DigimonStats { level: number; exp: number; maxExp: number; hp: number; maxHp: number; atk: number; }
+interface MapTarget { instanceId: string; id: string; name: string; level: number; hp: number; maxHp: number; image: string; rarity: 'Normal' | 'Elite' | 'Chefe' | 'Divino'; x: number; y: number; dir?: 'down'|'up'|'left'|'right'; }
 interface CaptureLogEntry { name: string; level: number; timestamp: string; rarity: string; }
 interface LootResult { exp: number; bits: number; item: string | null; leveledUp: boolean; }
 interface AutoHelperSettings { autoPotion: boolean; potionThreshold: number; autoScan: boolean; }
 interface HuntSessionStats { defeated: number; expGained: number; bitsGained: number; potionsUsed: number; scansUsed: number; timeStart: number; }
 
-// Novas Interfaces do CMS
-interface ServerDigimon { id: string; name: string; hp: number; atk: number; evolvesTo: string; evolveLevel: number; rarity: string; menuImg: string; }
-interface ServerMap { id: string; name: string; bgImage: string; minLevel: number; spawns: string; }
+// Interfaces do CMS e Mercado P2P
+interface ServerDigimon { id: string; name: string; hp: number; atk: number; evolvesTo: string; evolveLevel: number; rarity: string; menuImg: string; portraitImg: string; sprites?: { down: string; up: string; left: string; right: string; attack: string; }; }
+interface ServerMap { id: string; name: string; bgImg: string; minLevel: number; spawns: string; }
 interface ServerSettings { globalExpMultiplier: number; globalDropMultiplier: number; isEventActive: boolean; rngRates: { normal: number; elite: number; chefe: number; divino: number }; }
+interface MarketListing { id: string; sellerId: string; sellerName: string; itemId: string; amount: number; price: number; currency: 'bits' | 'gems'; createdAt: number; }
 
 interface GameState {
   tamerName: string;
@@ -46,13 +47,14 @@ interface GameState {
   isPremium: boolean;
   gamePassMissions: { id: string, targetId: string, desc: string, target: number, current: number, reward: number, claimed: boolean }[];
 
-  // INTEGRAÇÃO CMS
+  // INTEGRAÇÃO CMS E LIVE OPS
   serverDigimons: Record<string, ServerDigimon>;
   serverMaps: Record<string, ServerMap>;
   activeMapId: string | null;
   role: string;
   serverSettings: ServerSettings;
   storeItems: any[];
+  marketListings: MarketListing[]; 
 
   fetchServerData: () => Promise<void>;
   initServerData: () => void;
@@ -66,7 +68,10 @@ interface GameState {
   
   updateAutoHelper: (settings: Partial<AutoHelperSettings>) => void;
   resetHuntSession: () => void;
-  evolveDigimon: (id: string) => void;
+  evolveDigimon: (id: string) => void; 
+  
+  createListing: (uid: string, sellerName: string, itemId: string, amount: number, price: number, currency: 'bits' | 'gems') => Promise<void>;
+  buyListing: (uid: string, listingId: string) => Promise<void>;
 
   claimMission: (id: string) => void;
   buyPremium: () => void;
@@ -104,23 +109,24 @@ export const useGameStore = create<GameState>((set, get) => ({
     { id: 'm2', targetId: 'agumon', desc: 'Derrote 50 Agumon', target: 50, current: 0, reward: 20, claimed: false },
   ],
 
-  // CMS STATES
+  // CMS STATES E MERCADO
   serverDigimons: {},
   serverMaps: {},
   activeMapId: null,
   role: 'player',
   serverSettings: { globalExpMultiplier: 1, globalDropMultiplier: 1, isEventActive: false, rngRates: { normal: 70, elite: 20, chefe: 8, divino: 2 } },
   storeItems: [],
+  marketListings: [],
 
   fetchServerData: async () => {
     try {
       const digimonsSnap = await getDocs(collection(db, 'digimons'));
       const sDigis: Record<string, ServerDigimon> = {};
-      digimonsSnap.forEach(d => { sDigis[d.id] = d.data() as ServerDigimon; });
+      digimonsSnap.forEach(d => { sDigis[d.id] = { ...d.data(), id: d.id } as ServerDigimon; });
 
       const mapsSnap = await getDocs(collection(db, 'maps'));
       const sMaps: Record<string, ServerMap> = {};
-      mapsSnap.forEach(d => { sMaps[d.id] = d.data() as ServerMap; });
+      mapsSnap.forEach(d => { sMaps[d.id] = { ...d.data(), id: d.id } as ServerMap; });
 
       set({ serverDigimons: sDigis, serverMaps: sMaps });
     } catch (e) { console.error("Erro ao puxar dados do CMS:", e); }
@@ -133,11 +139,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     getDocs(collection(db, 'items')).then((snap) => {
       set({ storeItems: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
     });
+    // Escuta o Mercado Global P2P ao Vivo
+    onSnapshot(collection(db, 'market'), (snap) => {
+      const listings = snap.docs.map(d => ({ id: d.id, ...d.data() } as MarketListing));
+      set({ marketListings: listings.sort((a, b) => b.createdAt - a.createdAt) });
+    });
   },
 
   changeMap: (mapId: string) => {
+    const cleanMapId = mapId.toLowerCase(); // Força a leitura sempre em minúsculo
     get().resetHuntSession();
-    set({ activeMapId: mapId, mapTargets: [], scanningTarget: null, currentHuntType: null });
+    set({ activeMapId: cleanMapId, mapTargets: [], scanningTarget: null, currentHuntType: null });
     for (let i = 0; i < 4; i++) get().spawnSingleTarget();
   },
 
@@ -146,7 +158,101 @@ export const useGameStore = create<GameState>((set, get) => ({
   updateAutoHelper: (settings) => set(state => ({ autoHelper: { ...state.autoHelper, ...settings } })),
   resetHuntSession: () => set({ huntSession: { defeated: 0, expGained: 0, bitsGained: 0, potionsUsed: 0, scansUsed: 0, timeStart: Date.now() } }),
 
-  evolveDigimon: (id) => { alert(`O ${id} evoluiu com sucesso!`); },
+  // MOTOR DE EVOLUÇÃO REAL
+  evolveDigimon: (id) => { 
+    const state = get();
+    const sDigi = state.serverDigimons[id];
+    const stats = state.myDigimons[id];
+
+    if (!sDigi || !stats || !sDigi.evolvesTo || stats.level < sDigi.evolveLevel) return;
+
+    const targetId = sDigi.evolvesTo;
+    const targetServerData = state.serverDigimons[targetId];
+    if (!targetServerData) { alert("Dados da evolução não encontrados no servidor."); return; }
+
+    const newOwned = state.ownedDigimons.map(d => d === id ? targetId : d);
+    const newMyDigimons = { ...state.myDigimons };
+    delete newMyDigimons[id];
+
+    newMyDigimons[targetId] = {
+      level: 1,
+      exp: 0,
+      maxExp: 100,
+      hp: targetServerData.hp || 100,
+      maxHp: targetServerData.hp || 100,
+      atk: targetServerData.atk || 10
+    };
+
+    const newActive = state.activeDigimon === id ? targetId : state.activeDigimon;
+
+    set({
+      ownedDigimons: newOwned,
+      myDigimons: newMyDigimons,
+      activeDigimon: newActive
+    });
+
+    alert(`✨ Incrível! O seu ${sDigi.name} evoluiu para ${targetServerData.name}!`);
+  },
+
+  // FUNÇÕES DO MERCADO P2P
+  createListing: async (uid, sellerName, itemId, amount, price, currency) => {
+    const state = get();
+    if ((state.fragments[itemId] || 0) < amount) { alert("Fragmentos insuficientes para vender."); return; }
+    
+    set({ fragments: { ...state.fragments, [itemId]: state.fragments[itemId] - amount } });
+
+    try {
+      await addDoc(collection(db, 'market'), {
+        sellerId: uid,
+        sellerName,
+        itemId,
+        amount,
+        price,
+        currency,
+        createdAt: Date.now()
+      });
+      alert("Sua oferta foi listada no mercado global!");
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao criar oferta.");
+    }
+  },
+
+  buyListing: async (uid, listingId) => {
+    const state = get();
+    const listing = state.marketListings.find(l => l.id === listingId);
+    if (!listing) return;
+    if (listing.sellerId === uid) { alert("Você não pode comprar sua própria oferta."); return; }
+
+    if (listing.currency === 'gems' && state.gems < listing.price) { alert("Gemas insuficientes."); return; }
+    if (listing.currency === 'bits' && state.bits < listing.price) { alert("Bits insuficientes."); return; }
+
+    const newGems = listing.currency === 'gems' ? state.gems - listing.price : state.gems;
+    const newBits = listing.currency === 'bits' ? state.bits - listing.price : state.bits;
+    
+    set({ 
+      gems: newGems, 
+      bits: newBits,
+      fragments: { ...state.fragments, [listing.itemId]: (state.fragments[listing.itemId] || 0) + listing.amount }
+    });
+
+    try {
+      await deleteDoc(doc(db, 'market', listingId));
+      
+      const sellerRef = doc(db, 'users', listing.sellerId);
+      const sellerSnap = await getDoc(sellerRef);
+      if (sellerSnap.exists()) {
+        const sData = sellerSnap.data();
+        await updateDoc(sellerRef, {
+          [listing.currency]: (sData[listing.currency] || 0) + listing.price
+        });
+      }
+      alert(`Compra de ${listing.amount}x ${listing.itemId} realizada com sucesso!`);
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao processar compra.");
+    }
+  },
 
   claimMission: (id) => {
     const { gamePassMissions, bpp } = get();
@@ -173,7 +279,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { incubatingEgg, ownedDigimons, myDigimons } = get();
     if (incubatingEgg && Date.now() >= incubatingEgg.hatchTime) {
       const id = incubatingEgg.digimonId;
-      set({ incubatingEgg: null, ownedDigimons: [...ownedDigimons, id], myDigimons: { ...myDigimons, [id]: { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100 } }, activeDigimon: get().activeDigimon || id });
+      set({ incubatingEgg: null, ownedDigimons: [...ownedDigimons, id], myDigimons: { ...myDigimons, [id]: { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100, atk: 10 } }, activeDigimon: get().activeDigimon || id });
     }
   },
 
@@ -190,6 +296,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     for (let i = 0; i < 4; i++) get().spawnSingleTarget();
   },
 
+  // 🔥 MOTOR DE SPAWN BLINDADO CONTRA FANTASMAS
   spawnSingleTarget: () => {
     const state = get();
     const { activeMapId, serverMaps, serverDigimons, mapTargets, serverSettings } = state;
@@ -198,18 +305,16 @@ export const useGameStore = create<GameState>((set, get) => ({
     let targetBase = state.currentHuntType;
 
     if (activeMapId && serverMaps[activeMapId]) {
-      const spawns = serverMaps[activeMapId].spawns.split(',').map(s => s.trim()).filter(s => s);
+      const spawns = serverMaps[activeMapId].spawns.split(',').map((s: string) => s.trim()).filter((s: string) => s);
       if (spawns.length > 0) {
         const randomSpawnId = spawns[Math.floor(Math.random() * spawns.length)];
         const sDigi = serverDigimons[randomSpawnId];
+        
         if (sDigi) {
-          targetBase = {
-            id: sDigi.id,
-            name: sDigi.name,
-            level: serverMaps[activeMapId].minLevel, 
-            image: sDigi.menuImg,
-            rarity: sDigi.rarity as any
-          };
+          targetBase = { id: sDigi.id, name: sDigi.name, level: serverMaps[activeMapId].minLevel, image: sDigi.menuImg, rarity: sDigi.rarity as any };
+        } else {
+          // SE O BANCO NÃO ACHAR O MONSTRO (O Efeito Fantasma), ELE CRIA UM GENÉRICO NA HORA PARA NÃO TRAVAR:
+          targetBase = { id: randomSpawnId, name: randomSpawnId, level: serverMaps[activeMapId].minLevel, image: '', rarity: 'Normal' };
         }
       }
     }
@@ -219,7 +324,6 @@ export const useGameStore = create<GameState>((set, get) => ({
     const x = Math.floor(Math.random() * 50) + 25; 
     const y = Math.floor(Math.random() * 30) + 40; 
     
-    // RNG do CMS
     const randRarity = Math.random() * 100;
     let { id, name, image, level } = targetBase;
     let rarity: 'Normal' | 'Elite' | 'Chefe' | 'Divino' = 'Normal';
@@ -234,7 +338,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const hpMultiplier = rarity === 'Divino' ? 10 : rarity === 'Chefe' ? 5 : rarity === 'Elite' ? 2 : 1;
     const finalHp = baseHp * hpMultiplier;
     
-    set({ mapTargets: [...get().mapTargets, { instanceId: `${id}_${Date.now()}_${Math.random()}`, id, name, level, hp: finalHp, maxHp: finalHp, image, rarity, x, y }] });
+    set({ mapTargets: [...get().mapTargets, { instanceId: `${id}_${Date.now()}_${Math.random()}`, id, name, level, hp: finalHp, maxHp: finalHp, image, rarity, x, y, dir: 'down' }] });
   },
 
   attackMapTarget: (targetInstanceId, damage) => {
@@ -285,7 +389,6 @@ export const useGameStore = create<GameState>((set, get) => ({
     const currentStats = myDigimons[activeDigimon] || { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100 };
     const rarityExpMult = target.rarity === 'Divino' ? 10 : target.rarity === 'Chefe' ? 5 : target.rarity === 'Elite' ? 2 : 1;
     
-    // XP do CMS
     const earnedExp = Math.floor(target.level * 20 * rarityExpMult * serverSettings.globalExpMultiplier);
     const newExp = currentStats.exp + earnedExp;
     
@@ -303,7 +406,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       leveledUp = true;
     }
 
-    // Bits/Drops do CMS
     const earnedBits = Math.floor(target.level * 25 * rarityExpMult * serverSettings.globalDropMultiplier);
     let droppedItem = null;
     let droppedGear = null;
@@ -346,7 +448,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { fragments, ownedDigimons, myDigimons } = get();
     const count = fragments[id] || 0;
     if (count >= 50 && !ownedDigimons.includes(id)) {
-      set({ fragments: { ...fragments, [id]: count - 50 }, ownedDigimons: [...ownedDigimons, id], myDigimons: { ...myDigimons, [id]: { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100 } }, activeDigimon: get().activeDigimon || id });
+      set({ fragments: { ...fragments, [id]: count - 50 }, ownedDigimons: [...ownedDigimons, id], myDigimons: { ...myDigimons, [id]: { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100, atk: 10 } }, activeDigimon: get().activeDigimon || id });
     }
   },
 
@@ -368,7 +470,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (itemId === 'meat') heal = 30;
       else if (itemId === 'potion') heal = 100;
       else {
-        // Verifica itens configurados no CMS
         const customItem = storeItems.find(i => i.id === itemId);
         if (customItem && customItem.type === 'consumable') heal = customItem.effectValue;
       }
@@ -403,7 +504,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   
   completeTutorial: async (uid, gender, starterId) => {
-    const newState = { avatar: gender === 'female' ? 'sora' : 'tai', hasCompletedTutorial: true, ownedDigimons: [starterId], activeDigimon: starterId, myDigimons: { [starterId]: { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100 } } };
+    const newState = { avatar: gender === 'female' ? 'sora' : 'tai', hasCompletedTutorial: true, ownedDigimons: [starterId], activeDigimon: starterId, myDigimons: { [starterId]: { level: 1, exp: 0, maxExp: 100, hp: 100, maxHp: 100, atk: 10 } } };
     set(newState);
     get().changeMap('floresta'); 
     try { await updateDoc(doc(db, 'users', uid), { ...newState, bits: get().bits, gems: get().gems, items: get().items, equippedOutfit: get().equippedOutfit, ownedOutfits: get().ownedOutfits, captureLog: get().captureLog, ownedGear: get().ownedGear, equippedGear: get().equippedGear, soundEnabled: get().soundEnabled, bpp: get().bpp, isPremium: get().isPremium }); } catch (error) { console.error('Erro', error); }
