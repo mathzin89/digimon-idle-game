@@ -68,7 +68,7 @@ export function GameModals({ activeModal, closeModal, setCurrentZone, handleLogo
                        }}
                        className={`relative rounded-xl border overflow-hidden group transition-all ${canEnter ? 'border-[#1e293b] hover:border-cyan-400 cursor-pointer shadow-lg hover:shadow-[0_0_15px_rgba(34,211,238,0.2)]' : 'border-[#1e293b] opacity-50 cursor-not-allowed'}`}
                      >
-                       <div className="h-32 bg-cover bg-center transition-transform duration-500 group-hover:scale-110" style={{ backgroundImage: `url('${map.bgImage || '/map-bg.png'}')` }} />
+                       <div className="h-32 bg-cover bg-center transition-transform duration-500 group-hover:scale-110" style={{ backgroundImage: `url('${map.bgImg || '/map-bg.png'}')` }} />
                        <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1a] via-[#0a0f1a]/90 to-[#0a0f1a]/20" />
                        
                        <div className="absolute bottom-0 left-0 right-0 p-4">

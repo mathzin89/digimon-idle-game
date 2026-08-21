@@ -1,11 +1,9 @@
-// src/pages/admin/tabs/MapTab.tsx
 import React, { useState, useEffect } from 'react';
 import { db } from '../../../services/firebase';
 import { collection, getDocs, setDoc, deleteDoc, doc } from 'firebase/firestore';
 
 interface MapData { id: string; name: string; minLevel: number; bgImg: string; spawns: string; }
 
-// 🔥 COLE SUA CHAVE DO IMGBB AQUI DENTRO DAS ASPAS:
 const IMGBB_API_KEY = '2c552c56d92a69888ea827f3764c992b'; 
 
 export function MapTab() {
@@ -37,7 +35,6 @@ export function MapTab() {
     e.preventDefault();
     if (!formData.id) return;
     
-    // Tratamento de segurança: remove vírgulas sobrando no final e espaços extras
     const cleanSpawns = formData.spawns.split(',').map(s => s.trim()).filter(s => s !== '').join(',');
     const finalData = { ...formData, spawns: cleanSpawns };
 
@@ -54,7 +51,6 @@ export function MapTab() {
     }
   };
 
-  // 🔥 MOTOR DE UPLOAD DA API DO IMGBB (Idêntico ao do Digimon)
   const handleBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
